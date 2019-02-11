@@ -1,0 +1,1 @@
+DROP TABLE substrate_logs;
