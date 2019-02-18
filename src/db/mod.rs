@@ -24,7 +24,7 @@ impl Actor for DbExecutor {
 impl DbExecutor {
     /// Execute query, returning nothing. Log error in case unable to get connection
     /// from DB pool.
-    pub fn do_execute<F, R>(&self, f: F) -> Result<R, PoolError>
+    pub fn with_connection<F, R>(&self, f: F) -> Result<R, PoolError>
     where
         F: FnOnce(&PgConnection) -> R,
     {
@@ -48,7 +48,7 @@ impl Handler<CreateSubstrateLog> for DbExecutor {
     type Result = Result<(), Error>;
 
     fn handle(&mut self, msg: CreateSubstrateLog, _: &mut Self::Context) -> Self::Result {
-        let _ = self.do_execute(|conn| {
+        let _ = self.with_connection(|conn| {
             use crate::schema::substrate_logs;
             #[allow(unused_imports)]
             use crate::schema::substrate_logs::dsl::*;
@@ -78,7 +78,7 @@ impl Handler<PurgeLogs> for DbExecutor {
     type Result = Result<(), Error>;
 
     fn handle(&mut self, msg: PurgeLogs, _: &mut Self::Context) -> Self::Result {
-        let _ = self.do_execute(|conn| {
+        let _ = self.with_connection(|conn| {
             let query = format!(
                 "DELETE FROM substrate_logs WHERE created_at < now() - {} * interval '1 hour'",
                 msg.hours_valid
