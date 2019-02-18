@@ -56,7 +56,7 @@ lazy_static! {
         .unwrap_or("".to_string())
         .parse()
         .unwrap_or(10);
-    pub static ref PORT: String = &env::var("PORT").expect("Unable to get PORT from ENV");
+    pub static ref PORT: String = env::var("PORT").expect("Unable to get PORT from ENV");
 }
 
 fn log_statics() {
