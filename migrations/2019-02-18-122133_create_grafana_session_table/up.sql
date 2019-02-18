@@ -1,0 +1,1 @@
+CREATE TABLE session (key CHAR(16) NOT NULL, data bytea, expiry INT NOT NULL, PRIMARY KEY (key));
