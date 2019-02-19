@@ -1,25 +1,20 @@
-use crate::db::PurgeLogs;
-use ::actix::dev::ToEnvelope;
 use ::actix::prelude::*;
+use ::actix_web::*;
 use std::time::Duration;
 
-pub struct DbPurge<A: Actor> {
+pub struct PeriodicAction<M: Message<Result = Result<(), Error>> + Send> {
     pub frequency: Duration,
-    pub purge_logs: PurgeLogs,
-    pub db: Addr<A>,
+    pub message: M,
+    pub recipient: Recipient<M>,
 }
 
-impl<A> Actor for DbPurge<A>
-where
-    A: Actor + Handler<PurgeLogs>,
-    A::Context: ToEnvelope<A, PurgeLogs>,
-{
+impl<M: Message<Result = Result<(), Error>> + Clone + Send + 'static> Actor for PeriodicAction<M> {
     type Context = Context<Self>;
 
     fn started(&mut self, ctx: &mut Context<Self>) {
         ctx.run_interval(self.frequency, |act, _ctx| {
-            if let Err(e) = act.db.try_send(act.purge_logs.clone()) {
-                error!("Unable to send purge request to DbExecutor: {}", e);
+            if let Err(e) = act.recipient.try_send(act.message.clone()) {
+                error!("Unable to send message to DbExecutor: {}", e);
             }
         });
     }
