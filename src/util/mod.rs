@@ -14,7 +14,7 @@ impl<M: Message<Result = Result<(), Error>> + Clone + Send + 'static> Actor for 
     fn started(&mut self, ctx: &mut Context<Self>) {
         ctx.run_interval(self.frequency, |act, _ctx| {
             if let Err(e) = act.recipient.try_send(act.message.clone()) {
-                error!("Unable to send message to DbExecutor: {}", e);
+                error!("Unable to send message to Recipient. {}", e);
             }
         });
     }
