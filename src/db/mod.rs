@@ -10,9 +10,6 @@ use diesel::RunQueryDsl;
 use crate::db::models::NewSubstrateLog;
 use crate::{DATABASE_POOL_SIZE, DATABASE_URL};
 
-/// Override this with environment variable of the same name
-//const DATABASE_POOL_SIZE: u32 = 10;
-
 pub struct DbExecutor {
     pub pool: Pool<ConnectionManager<PgConnection>>,
 }
@@ -22,8 +19,7 @@ impl Actor for DbExecutor {
 }
 
 impl DbExecutor {
-    /// Execute query, returning nothing. Log error in case unable to get connection
-    /// from DB pool.
+    /// Execute query, returning result. Log error if any and return result.
     pub fn with_connection<F, R>(&self, f: F) -> Result<R, PoolError>
     where
         F: FnOnce(&PgConnection) -> R,
@@ -93,9 +89,6 @@ impl Handler<PurgeLogs> for DbExecutor {
     }
 }
 
-/// Create DB pool; requires `DATABASE_URL` env variable,
-/// optional environment variable for number of pooled connections:
-/// `DATABASE_POOL_SIZE` otherwise defaults to 10
 pub fn create_pool() -> Pool<ConnectionManager<PgConnection>> {
     let manager = ConnectionManager::new(DATABASE_URL.to_string());
     let pool = Pool::builder()

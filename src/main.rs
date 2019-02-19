@@ -83,7 +83,7 @@ fn main() {
         .middleware(middleware::Logger::default())
         .resource("/", |r| r.method(http::Method::GET).f(ws_index))
     })
-    .backlog(*MAX_PENDING_CONNECTIONS) // max pending connections
+    .backlog(*MAX_PENDING_CONNECTIONS)
     .bind(&address)
     .unwrap()
     .start();
@@ -121,13 +121,13 @@ impl NodeSocket {
 impl Actor for NodeSocket {
     type Context = ws::WebsocketContext<Self, State>;
 
-    /// Method is called on actor start. Start the heartbeat process here.
+    // Initiate the heartbeat process on start
     fn started(&mut self, ctx: &mut Self::Context) {
         self.hb(ctx);
     }
 }
 
-/// Handler for `ws::Message`
+// Handler for ws::Message
 impl StreamHandler<ws::Message, ws::ProtocolError> for NodeSocket {
     fn handle(&mut self, msg: ws::Message, ctx: &mut Self::Context) {
         match msg {
@@ -178,7 +178,7 @@ where
         .and_then(|v| v.parse().map_err(|_| ()))
 }
 
-// websocket handshake and start actor
+// Websocket handshake and start actor
 fn ws_index(r: &HttpRequest<State>) -> Result<HttpResponse, Error> {
     let ip = r
         .connection_info()
