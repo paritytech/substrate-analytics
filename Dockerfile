@@ -1,4 +1,4 @@
-FROM rustlang/rust:nightly-slim as builder
+FROM rust:slim as builder
 
 WORKDIR /substrate-save
 
