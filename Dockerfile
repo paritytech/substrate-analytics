@@ -9,7 +9,7 @@ RUN cargo build --release
 
 FROM debian:stretch-slim
 
-COPY --from=builder /substrate-save/target/profile/substrate-save /usr/local/bin
+COPY --from=builder /substrate-save/target/release/save /usr/local/bin/
 
 
 # metadata
@@ -20,4 +20,4 @@ LABEL maintainer="devops-team@parity.io" \
   url="https://github.com/paritytech/substrate-save/" \
   vcs-url="./"
 
-ENTRYPOINT ["/usr/local/bin/substrate-save"]
+ENTRYPOINT ["/usr/local/bin/save"]
