@@ -6,14 +6,15 @@ Telemetry will be stored in a SQL database. Management of the database schema is
 
 Stored data is purged from the DB according to `LOG_EXPIRY_HOURS`
 
-### Set up for development
+### Set up for development and deployment
 
-- create a `.env` file in project root containing: (eg) 
+- (for development) create a `.env` file in project root containing: (eg) 
     - `DATABASE_URL=postgres://username:password@localhost/save` 
     - `PORT=8080`
 - install [Diesel cli](https://github.com/diesel-rs/diesel/tree/master/diesel_cli)
 - you might need [additional packages](https://github.com/diesel-rs/diesel/blob/master/guide_drafts/backend_installation.md)
-- run `diesel database setup` to create a local db for testing
+- run `diesel database setup` to initialise DB
+- after any changes to the schema via migrations, you must `diesel migration run`
 
 Optionally specify the following environment variables:
 
@@ -23,5 +24,11 @@ Optionally specify the following environment variables:
 - `LOG_EXPIRY_HOURS`  (default: 168)
 - `MAX_PENDING_CONNECTIONS` (default: 8192)
 - `DATABASE_POOL_SIZE` (default: 10)
+
+To allow logging you must set:
+
+- `RUST_LOG` to some log level
+
+---
 
 There are some easy possibilities available for optimisation (eg. batching inserts).
