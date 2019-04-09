@@ -7,8 +7,6 @@ extern crate diesel;
 extern crate lazy_static;
 #[macro_use]
 extern crate serde_derive;
-#[macro_use]
-extern crate serde_json;
 
 pub mod db;
 pub mod schema;
@@ -18,10 +16,10 @@ use dotenv::dotenv;
 use std::env;
 use std::time::{Duration, Instant};
 
-use crate::db::models::NewSubstrateLog;
 use crate::db::*;
 use actix::prelude::*;
 use actix_web::{http, middleware, server, ws, App, Error, HttpRequest, HttpResponse};
+use crate::db::logs::RawLog;
 
 struct State {
     db: Addr<db::DbExecutor>,
@@ -61,18 +59,18 @@ fn main() {
     info!("Creating database pool");
     let pool = create_pool();
     let num_threads = num_cpus::get() * 3;
-    info!("Starting DbExecutor with {} threads", num_threads);
-    let db_arbiter = SyncArbiter::start(num_threads, move || db::DbExecutor { pool: pool.clone() });
+    info!("Starting DbArbiter with {} threads", num_threads);
+    let db_arbiter = SyncArbiter::start(num_threads, move || db::DbExecutor::new(pool.clone()) );
     info!("DbExecutor started");
 
-    let purger = util::PeriodicAction {
+    let db_housekeeper = util::PeriodicAction {
         frequency: *PURGE_FREQUENCY,
         message: PurgeLogs {
             hours_valid: *LOG_EXPIRY_HOURS,
         },
         recipient: db_arbiter.clone().recipient(),
     };
-    purger.start();
+    db_housekeeper.start();
 
     let address = format!("0.0.0.0:{}", &*PORT);
     info!("Starting server on: {}", &address);
@@ -139,13 +137,12 @@ impl StreamHandler<ws::Message, ws::ProtocolError> for NodeSocket {
                 self.hb = Instant::now();
             }
             ws::Message::Text(text) => {
-                let log = NewSubstrateLog {
-                    node_ip: self.ip.clone(),
-                    logs: json!(text),
-                };
                 ctx.state()
                     .db
-                    .try_send(CreateSubstrateLog { log })
+                    .try_send(RawLog {
+                        ip_addr: self.ip.clone(),
+                        json: text,
+                    })
                     .unwrap_or_else(|e| error!("{:?}", e));
             }
             ws::Message::Binary(_bin) => (),
