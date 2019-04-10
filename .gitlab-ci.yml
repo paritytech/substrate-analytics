@@ -115,6 +115,7 @@ build-publish-docker-release:
   variables:
     NAMESPACE:                     "${KUBE_NAMESPACE}"
     REPLICAS:                      "1"
+    WS_PORT:                       "1024"
   tags:
     # this is the runner that is used to deploy it
     - kubernetes-parity-build
@@ -122,7 +123,7 @@ build-publish-docker-release:
     - test "${DEPLOY_TAG}" || DEPLOY_TAG="$CI_COMMIT_SHORT_SHA"
   script:
     - echo "Substrate-save version = ${DEPLOY_TAG}"
-    - export SUBSTRATE_SAVE_DB_URL="parity/substrate-save:${DEPLOY_TAG}"
+    - export SUBSTRATE_SAVE_DOCKER_IMAGE="parity/substrate-save:${DEPLOY_TAG}"
     # or use helm to render the template
     - cat ./deployment.template.yml | envsubst | kubectl apply -n "$KUBE_NAMESPACE" -f -
     - echo "# substrate-save namespace ${KUBE_NAMESPACE}"
