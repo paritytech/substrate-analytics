@@ -12,7 +12,6 @@ stages:
   - dockerize
   - deploy
 
-image:                             parity/rust-substrate-build:stretch
 
 variables:
   GIT_STRATEGY:                    fetch
@@ -33,31 +32,33 @@ variables:
 
 #### stage:                        test
 
-test-linux-stable:
-  stage:                           test
-  variables:
-    RUST_TOOLCHAIN: stable
-    # Enable debug assertions since we are running optimized builds for testing
-    # but still want to have debug assertions.
-    RUSTFLAGS: -Cdebug-assertions=y
-    TARGET: native
-  tags:
-    - linux-docker
-  only:
-    - tags
-    - master
-    - schedules
-    - web
-    - /^[0-9]+$/
-  except:
-    variables:
-      - $DEPLOY_TAG
-  before_script:
-    - sccache -s
-  script:
-    - time cargo test --all --release --verbose --locked
-  after_script:
-    - sccache -s
+# test-linux-stable:
+#   stage:                           test
+#   # doesn't contain libpq
+#   image:                           parity/rust-substrate-build:stretch
+#   variables:
+#     RUST_TOOLCHAIN: stable
+#     # Enable debug assertions since we are running optimized builds for testing
+#     # but still want to have debug assertions.
+#     RUSTFLAGS: -Cdebug-assertions=y
+#     TARGET: native
+#   tags:
+#     - linux-docker
+#   only:
+#     - tags
+#     - master
+#     - schedules
+#     - web
+#     - /^[0-9]+$/
+#   except:
+#     variables:
+#       - $DEPLOY_TAG
+#   before_script:
+#     - sccache -s
+#   script:
+#     - time cargo test --all --release --verbose --locked
+#   after_script:
+#     - sccache -s
 
 
 

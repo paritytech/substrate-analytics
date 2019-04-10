@@ -8,8 +8,10 @@ WORKDIR /substrate-save
 
 ADD . .
 
-RUN echo "building substrate-save" && cargo build --release
-RUN echo "building diesel-cli" && cargo install diesel_cli --no-default-features --features postgres
+RUN echo "building substrate-save" && \
+  cargo build --release
+RUN echo "building diesel-cli" && \
+  cargo install diesel_cli --root /substrate-save --bin diesel --force --no-default-features --features postgres
 
 
 
@@ -35,7 +37,7 @@ RUN useradd -m -u 1000 -U -s /bin/sh -d /save save
 
 COPY --from=builder /substrate-save/target/release/save /usr/local/bin/
 COPY --from=builder /substrate-save/migrations /save/migrations
-COPY --from=builder $HOME/.cargo/bin/diesel /usr/local/bin/
+COPY --from=builder /substrate-save/bin/diesel /usr/local/bin/
 
 USER save
 ENV RUST_BACKTRACE 1
