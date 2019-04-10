@@ -1,0 +1,168 @@
+# .gitlab-ci.yml
+#
+# substrate-save (derived from substrate ci)
+#
+# pipelines can be triggered manually in the web
+# setting DEPLOY_TAG will only deploy the tagged image
+#
+
+
+stages:
+  - test
+  - dockerize
+  - deploy
+
+image:                             parity/rust-substrate-build:stretch
+
+variables:
+  GIT_STRATEGY:                    fetch
+  CI_SERVER_NAME:                  "GitLab CI"
+  CARGO_HOME:                      "/ci-cache/substrate-save/cargo/${CI_JOB_NAME}"
+
+
+.kubernetes-build:
+  tags:
+    - kubernetes-parity-build
+  environment:
+    name: parity-build
+
+
+
+
+
+
+#### stage:                        test
+
+test-linux-stable:
+  stage:                           test
+  variables:
+    RUST_TOOLCHAIN: stable
+    # Enable debug assertions since we are running optimized builds for testing
+    # but still want to have debug assertions.
+    RUSTFLAGS: -Cdebug-assertions=y
+    TARGET: native
+  tags:
+    - linux-docker
+  only:
+    - tags
+    - master
+    - schedules
+    - web
+    - /^[0-9]+$/
+  except:
+    variables:
+      - $DEPLOY_TAG
+  before_script:
+    - sccache -s
+  script:
+    - time cargo test --all --release --verbose --locked
+  after_script:
+    - sccache -s
+
+
+
+
+
+
+.build-only:
+  only:
+    - master
+    - tags
+    - web
+
+
+
+
+#### stage:                        dockerize
+
+build-publish-docker-release:
+  extends:
+    - .kubernetes-build
+    - .build-only
+  stage:                           dockerize
+  image:                           docker:stable
+  services:
+    - docker:dind
+  # collect VERSION artifact here to pass it on to kubernetes
+  variables:
+    DOCKER_HOST:                   tcp://localhost:2375
+    DOCKER_DRIVER:                 overlay2
+    GIT_STRATEGY:                  none
+    # DOCKERFILE:                  scripts/docker/Dockerfile
+    CONTAINER_IMAGE:               parity/substrate-save
+  before_script:
+    - test "$Docker_Hub_User_Parity" -a "$Docker_Hub_Pass_Parity"
+        || ( echo "no docker credentials provided"; exit 1 )
+    - docker login -u "$Docker_Hub_User_Parity" -p "$Docker_Hub_Pass_Parity"
+    - docker info
+  script:
+    - docker build --tag $CONTAINER_IMAGE:$CI_COMMIT_SHORT_SHA --tag $CONTAINER_IMAGE:latest .
+    - docker push $CONTAINER_IMAGE:$CI_COMMIT_SHORT_SHA
+    - docker push $CONTAINER_IMAGE:latest
+  after_script:
+    - docker logout
+
+
+
+
+
+.deploy-template:
+  extends:                         .build-only
+  stage:                           deploy
+  when:                            manual
+  retry:                           1
+  image:                           parity/kubetools:latest
+  variables:
+    NAMESPACE:                     "${KUBE_NAMESPACE}"
+    REPLICAS:                      "1"
+  tags:
+    # this is the runner that is used to deploy it
+    - kubernetes-parity-build
+  before_script:
+    - test "${DEPLOY_TAG}" || DEPLOY_TAG="$CI_COMMIT_SHORT_SHA"
+  script:
+    - echo "Substrate-save version = ${DEPLOY_TAG}"
+    - export SUBSTRATE_SAVE_DB_URL="parity/substrate-save:${DEPLOY_TAG}"
+    # or use helm to render the template
+    - cat ./deployment.template.yml | envsubst | kubectl apply -n "$KUBE_NAMESPACE" -f -
+    - echo "# substrate-save namespace ${KUBE_NAMESPACE}"
+    - kubectl -n ${KUBE_NAMESPACE} get all
+    - echo "# wait for the rollout to complete"
+    - kubectl -n ${KUBE_NAMESPACE} rollout status deployment/substrate-save
+
+
+# have environment:url eventually point to the logs
+
+.deploy-cibuild:
+extends:                           .deploy
+  dependencies:
+    - publish-docker-release
+
+.deploy-tag:
+extends:                           .deploy
+  only:
+    variables:
+      - $DEPLOY_TAG
+
+# have environment:url eventually point to the logs
+
+deploy-ew3:
+  extends:                         .deploy-cibuild
+  environment:
+    name: parity-prod-ew3
+
+# deploy-ue1:
+#   extends:                         .deploy-cibuild
+#   environment:
+#     name: parity-prod-ue1
+
+deploy-ew3-tag:
+  extends:                         .deploy-tag
+  environment:
+    name: parity-prod-ew3
+
+# deploy-ue1-tag:
+#   extends:                         .deploy-tag
+#   environment:
+#     name: parity-prod-ue1
+
