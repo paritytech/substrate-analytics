@@ -87,7 +87,7 @@ build-publish-docker-release:
   variables:
     DOCKER_HOST:                   tcp://localhost:2375
     DOCKER_DRIVER:                 overlay2
-    GIT_STRATEGY:                  none
+    # GIT_STRATEGY:                none
     # DOCKERFILE:                  scripts/docker/Dockerfile
     CONTAINER_IMAGE:               parity/substrate-save
   before_script:
