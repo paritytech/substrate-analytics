@@ -1,13 +1,13 @@
-pub mod models;
 pub mod logs;
+pub mod models;
 
-use logs::{LogBatch, RawLog};
 use ::actix::prelude::*;
 use ::actix_web::*;
 use diesel;
 use diesel::pg::PgConnection;
 use diesel::r2d2::{ConnectionManager, Pool, PoolError};
 use diesel::RunQueryDsl;
+use logs::{LogBatch, RawLog};
 use std::time::{Duration, Instant};
 
 use crate::db::models::NewSubstrateLog;
@@ -37,16 +37,16 @@ impl DbExecutor {
 
     // Creates a new DbExecutor, with connection pool
     pub fn new(pool: Pool<ConnectionManager<PgConnection>>) -> Self {
-
         let log_batch = LogBatch::new();
-        DbExecutor {
-            pool,
-            log_batch,
-        }
+        DbExecutor { pool, log_batch }
     }
 
     fn save_logs(&self, logs: Vec<String>) {
-        let values: String = logs.into_iter().map(|s| s).collect::<Vec<String>>().join(&",");
+        let values: String = logs
+            .into_iter()
+            .map(|s| s)
+            .collect::<Vec<String>>()
+            .join(&",");
         let _ = self.with_connection(|conn| {
             let query = format!(
                 "INSERT INTO substrate_logs (node_ip, logs) values {}",
@@ -69,8 +69,10 @@ impl Handler<RawLog> for DbExecutor {
 
     fn handle(&mut self, msg: RawLog, _: &mut Self::Context) -> Self::Result {
         self.log_batch.push(msg);
-        if self.log_batch.last_saved + Duration::from_millis(1000) < Instant::now() {
-            let rows_to_save = std::mem::replace(&mut self.log_batch.rows, Vec::new());
+        if self.log_batch.last_saved + Duration::from_millis(100) < Instant::now()
+            || self.log_batch.rows.len() > 127
+        {
+            let rows_to_save = std::mem::replace(&mut self.log_batch.rows, Vec::with_capacity(128));
             self.save_logs(rows_to_save);
             self.log_batch.last_saved = Instant::now();
         }

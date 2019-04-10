@@ -14,7 +14,7 @@ pub struct LogBatch {
 impl LogBatch {
     pub fn new() -> Self {
         LogBatch {
-            rows: Vec::with_capacity(1024),
+            rows: Vec::with_capacity(128),
             last_saved: Instant::now(),
         }
     }
