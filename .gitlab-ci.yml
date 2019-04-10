@@ -20,7 +20,7 @@ variables:
   CARGO_HOME:                      "/ci-cache/substrate-save/cargo/${CI_JOB_NAME}"
 
 
-.kubernetes-build:
+.kubernetes-build:                 &kubernetes-build
   tags:
     - kubernetes-parity-build
   environment:
@@ -64,7 +64,7 @@ test-linux-stable:
 
 
 
-.build-only:
+.build-only:                       &build-only
   only:
     - master
     - tags
@@ -76,9 +76,8 @@ test-linux-stable:
 #### stage:                        dockerize
 
 build-publish-docker-release:
-  extends:
-    - .kubernetes-build
-    - .build-only
+  <<:                              *build-only
+  <<:                              *kubernetes-build
   stage:                           dockerize
   image:                           docker:stable
   services:
@@ -106,8 +105,8 @@ build-publish-docker-release:
 
 
 
-.deploy-template:
-  extends:                         .build-only
+.deploy-template:                  &deploy
+  <<:                              *build-only
   stage:                           deploy
   when:                            manual
   retry:                           1
@@ -133,13 +132,13 @@ build-publish-docker-release:
 
 # have environment:url eventually point to the logs
 
-.deploy-cibuild:
-extends:                           .deploy
+.deploy-cibuild:                   &deploy-cibuild
+  <<:                              *deploy
   dependencies:
-    - publish-docker-release
+    - build-publish-docker-release
 
-.deploy-tag:
-extends:                           .deploy
+.deploy-tag:                       &deploy-tag
+  <<:                              *deploy
   only:
     variables:
       - $DEPLOY_TAG
@@ -147,7 +146,7 @@ extends:                           .deploy
 # have environment:url eventually point to the logs
 
 deploy-ew3:
-  extends:                         .deploy-cibuild
+  <<:                              *deploy-cibuild
   environment:
     name: parity-prod-ew3
 
@@ -157,7 +156,7 @@ deploy-ew3:
 #     name: parity-prod-ue1
 
 deploy-ew3-tag:
-  extends:                         .deploy-tag
+  <<:                              *deploy-tag
   environment:
     name: parity-prod-ew3
 
