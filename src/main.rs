@@ -90,7 +90,7 @@ fn log_statics() {
     info!("PURGE_FREQUENCY = {:?}", *PURGE_FREQUENCY);
     info!("LOG_EXPIRY_HOURS = {:?}", *LOG_EXPIRY_HOURS);
     info!("MAX_PENDING_CONNECTIONS = {:?}", *MAX_PENDING_CONNECTIONS);
-    info!("DATABASE_URL = {:?}", *DATABASE_URL);
+    info!("DATABASE_URL = *HIDDEN*");
     info!("DATABASE_POOL_SIZE = {:?}", *DATABASE_POOL_SIZE);
     info!("PORT = {:?}", *PORT);
 }
