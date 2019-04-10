@@ -1,17 +1,20 @@
 FROM rust:slim as builder
 
+RUN apt-get update && \
+    DEBIAN_FRONTEND=noninteractive apt-get upgrade -y && \
+    DEBIAN_FRONTEND=noninteractive apt-get install -y libpq-dev
+
 WORKDIR /substrate-save
 
+ADD . .
 
-RUN cargo build --release
+RUN echo "building substrate-save" && cargo build --release
+RUN echo "building diesel-cli" && cargo install diesel_cli --no-default-features --features postgres
+
 
 
 
 FROM debian:stretch-slim
-
-COPY --from=builder /substrate-save/target/release/save /usr/local/bin/
-
-
 # metadata
 LABEL maintainer="devops-team@parity.io" \
   vendor="Parity Technologies" \
@@ -20,4 +23,22 @@ LABEL maintainer="devops-team@parity.io" \
   url="https://github.com/paritytech/substrate-save/" \
   vcs-url="./"
 
-ENTRYPOINT ["/usr/local/bin/save"]
+
+RUN apt-get update && \
+    DEBIAN_FRONTEND=noninteractive apt-get upgrade -y && \
+    DEBIAN_FRONTEND=noninteractive apt-get install -y libpq5 && \
+    DEBIAN_FRONTEND=noninteractive apt-get autoremove -y && \
+    apt-get clean && \
+    find /var/lib/apt/lists/ -type f -not -name lock -delete
+
+RUN useradd -m -u 1000 -U -s /bin/sh -d /save save
+
+COPY --from=builder /substrate-save/target/release/save /usr/local/bin/
+COPY --from=builder /substrate-save/migrations /save/migrations
+COPY --from=builder $HOME/.cargo/bin/diesel /usr/local/bin/
+
+USER save
+ENV RUST_BACKTRACE 1
+
+
+ENTRYPOINT [ "/bin/sh", "-c", "/usr/local/bin/diesel migration run && exec /usr/local/bin/save"]

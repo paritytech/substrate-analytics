@@ -1,0 +1,94 @@
+# substrate-save
+# deployment.template.yml
+#
+# use:
+# envsubst < deployment.template.yml | kubectl apply -f -
+#
+# the following variables have to be set:
+#
+# SUBSTRATE_SAVE_DB_URL postgres://username:password@localhost/save
+# WS_PORT can be 1024
+# REPLICAS
+# SUBSTRATE_SAVE_DOCKER_IMAGE
+# 
+# HEARTBEAT_INTERVAL
+# CLIENT_TIMEOUT
+# PURGE_FREQUENCY
+# LOG_EXPIRY_HOURS
+# MAX_PENDING_CONNECTIONS
+# DATABASE_POOL_SIZE
+#
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: substrate-save
+  namespace: $NAMESPACE
+spec:
+  replicas: $REPLICAS
+  revisionHistoryLimit: 2
+  minReadySeconds: 3
+  strategy:
+    rollingUpdate:
+      maxUnavailable: 0
+      maxSurge: 1
+
+  template:
+    metadata:
+      labels:
+        app: substrate-save
+
+    spec:
+      containers:
+        - name: substrate-save
+          image: $SUBSTRATE_SAVE_DOCKER_IMAGE
+          imagePullPolicy: Always
+          ports:
+          - containerPort: "$WS_PORT"
+          env:
+            - name: PORT
+              value: "$WS_PORT"
+            - name: DATABASE_URL
+              value: "$SUBSTRATE_SAVE_DB_URL"
+            - name: HEARTBEAT_INTERVAL
+              value: "$HEARTBEAT_INTERVAL"
+            - name: CLIENT_TIMEOUT
+              value: "$CLIENT_TIMEOUT"
+            - name: PURGE_FREQUENCY
+              value: "$PURGE_FREQUENCY"
+            - name: LOG_EXPIRY_HOURS
+              value: "$LOG_EXPIRY_HOURS"
+            - name: MAX_PENDING_CONNECTIONS
+              value: "$MAX_PENDING_CONNECTIONS"
+            - name: DATABASE_POOL_SIZE
+              value: "$DATABASE_POOL_SIZE"
+          readinessProbe:
+            tcpSocket:
+              port: "$WS_PORT"
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          livenessProbe:
+            tcpSocket:
+              port: "$WS_PORT"
+            initialDelaySeconds: 15
+            periodSeconds: 20
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: substrate-save
+  namespace: $NAMESPACE
+spec:
+  selector:
+    app: substrate-save
+  ports:
+    - name: ws
+      port: "$WS_PORT"
+      targetPort: "$WS_PORT"
+      protocol: TCP
+  sessionAffinity: None
+  type: LoadBalancer
+  # loadBalancerSourceRanges:
+  # - 10.13.0.0/19
+  # - 10.100.0.0/19
+
