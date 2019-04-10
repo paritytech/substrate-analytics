@@ -44,7 +44,7 @@ spec:
           image: $SUBSTRATE_SAVE_DOCKER_IMAGE
           imagePullPolicy: Always
           ports:
-          - containerPort: "$WS_PORT"
+          - containerPort: $WS_PORT
           env:
             - name: PORT
               value: "$WS_PORT"
@@ -64,12 +64,12 @@ spec:
               value: "$DATABASE_POOL_SIZE"
           readinessProbe:
             tcpSocket:
-              port: "$WS_PORT"
+              port: $WS_PORT
             initialDelaySeconds: 5
             periodSeconds: 10
           livenessProbe:
             tcpSocket:
-              port: "$WS_PORT"
+              port: $WS_PORT
             initialDelaySeconds: 15
             periodSeconds: 20
 ---
@@ -83,8 +83,8 @@ spec:
     app: substrate-save
   ports:
     - name: ws
-      port: "$WS_PORT"
-      targetPort: "$WS_PORT"
+      port: $WS_PORT
+      targetPort: $WS_PORT
       protocol: TCP
   sessionAffinity: None
   type: LoadBalancer
