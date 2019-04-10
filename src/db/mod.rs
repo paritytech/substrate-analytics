@@ -1,3 +1,4 @@
+pub mod logs;
 pub mod models;
 
 use ::actix::prelude::*;
@@ -6,12 +7,15 @@ use diesel;
 use diesel::pg::PgConnection;
 use diesel::r2d2::{ConnectionManager, Pool, PoolError};
 use diesel::RunQueryDsl;
+use logs::{LogBatch, RawLog};
+use std::time::{Duration, Instant};
 
 use crate::db::models::NewSubstrateLog;
 use crate::{DATABASE_POOL_SIZE, DATABASE_URL};
 
 pub struct DbExecutor {
-    pub pool: Pool<ConnectionManager<PgConnection>>,
+    pool: Pool<ConnectionManager<PgConnection>>,
+    log_batch: LogBatch,
 }
 
 impl Actor for DbExecutor {
@@ -19,8 +23,8 @@ impl Actor for DbExecutor {
 }
 
 impl DbExecutor {
-    /// Execute query, returning result. Log error if any and return result.
-    pub fn with_connection<F, R>(&self, f: F) -> Result<R, PoolError>
+    // Execute query, returning result. Log error if any and return result.
+    fn with_connection<F, R>(&self, f: F) -> Result<R, PoolError>
     where
         F: FnOnce(&PgConnection) -> R,
     {
@@ -29,6 +33,50 @@ impl DbExecutor {
             error!("Couldn't get DB connection from pool: {}", e);
         }
         result
+    }
+
+    // Creates a new DbExecutor, with connection pool
+    pub fn new(pool: Pool<ConnectionManager<PgConnection>>) -> Self {
+        let log_batch = LogBatch::new();
+        DbExecutor { pool, log_batch }
+    }
+
+    fn save_logs(&self, logs: Vec<String>) {
+        let values: String = logs
+            .into_iter()
+            .map(|s| s)
+            .collect::<Vec<String>>()
+            .join(&",");
+        let _ = self.with_connection(|conn| {
+            let query = format!(
+                "INSERT INTO substrate_logs (node_ip, logs) values {}",
+                values
+            );
+            match diesel::sql_query(query).execute(conn) {
+                Err(e) => error!("Error inserting logs: {:?}", e),
+                Ok(n) => trace!("Inserted {} log records into database", n),
+            }
+        });
+    }
+}
+
+impl Message for RawLog {
+    type Result = Result<(), Error>;
+}
+
+impl Handler<RawLog> for DbExecutor {
+    type Result = Result<(), Error>;
+
+    fn handle(&mut self, msg: RawLog, _: &mut Self::Context) -> Self::Result {
+        self.log_batch.push(msg);
+        if self.log_batch.last_saved + Duration::from_millis(100) < Instant::now()
+            || self.log_batch.rows.len() > 127
+        {
+            let rows_to_save = std::mem::replace(&mut self.log_batch.rows, Vec::with_capacity(128));
+            self.save_logs(rows_to_save);
+            self.log_batch.last_saved = Instant::now();
+        }
+        Ok(())
     }
 }
 
