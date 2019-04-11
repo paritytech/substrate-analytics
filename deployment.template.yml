@@ -100,4 +100,5 @@ spec:
   type: LoadBalancer
   loadBalancerSourceRanges:
   - 35.198.174.150/32 # test-machine
+  - 212.227.252.235/32 # vpn-server
 
