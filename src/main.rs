@@ -4,31 +4,26 @@ extern crate env_logger;
 #[macro_use]
 extern crate diesel;
 #[macro_use]
+extern crate failure;
+#[macro_use]
 extern crate lazy_static;
 #[macro_use]
 extern crate serde_derive;
+#[macro_use]
+extern crate serde_json;
 
 pub mod db;
 pub mod schema;
 pub mod util;
+mod web;
 
 use dotenv::dotenv;
 use std::env;
-use std::time::{Duration, Instant};
+use std::time::Duration;
 
 use crate::db::*;
 use actix::prelude::*;
-use actix_web::{http, middleware, server, ws, App, Error, HttpRequest, HttpResponse};
-use crate::db::logs::RawLog;
-
-struct State {
-    db: Addr<db::DbExecutor>,
-}
-
-struct NodeSocket {
-    hb: Instant,
-    ip: String,
-}
+use actix_web::{middleware, server, App};
 
 lazy_static! {
     /// Must be set
@@ -60,7 +55,7 @@ fn main() {
     let pool = create_pool();
     let num_threads = num_cpus::get() * 3;
     info!("Starting DbArbiter with {} threads", num_threads);
-    let db_arbiter = SyncArbiter::start(num_threads, move || db::DbExecutor::new(pool.clone()) );
+    let db_arbiter = SyncArbiter::start(num_threads, move || db::DbExecutor::new(pool.clone()));
     info!("DbExecutor started");
 
     let db_housekeeper = util::PeriodicAction {
@@ -75,11 +70,13 @@ fn main() {
     let address = format!("0.0.0.0:{}", &*PORT);
     info!("Starting server on: {}", &address);
     server::new(move || {
-        App::with_state(State {
+        let mut app = App::with_state(web::State {
             db: db_arbiter.clone(),
         })
-        .middleware(middleware::Logger::default())
-        .resource("/", |r| r.method(http::Method::GET).f(ws_index))
+        .middleware(middleware::Logger::default());
+        app = web::stats::configure(app);
+        app = web::root::configure(app);
+        app
     })
     .backlog(*MAX_PENDING_CONNECTIONS)
     .bind(&address)
@@ -90,69 +87,6 @@ fn main() {
     let _ = sys.run();
 }
 
-// impl
-
-impl NodeSocket {
-    fn new(ip: String) -> Self {
-        Self {
-            ip,
-            hb: Instant::now(),
-        }
-    }
-
-    fn hb(&self, ctx: &mut <Self as Actor>::Context) {
-        let ip = self.ip.clone();
-        ctx.run_interval(*HEARTBEAT_INTERVAL, move |act, ctx| {
-            if Instant::now().duration_since(act.hb) > *CLIENT_TIMEOUT {
-                info!(
-                    "Websocket heartbeat failed for node: {}, disconnecting!",
-                    ip
-                );
-                ctx.stop();
-                return;
-            }
-            ctx.ping("");
-        });
-    }
-}
-
-impl Actor for NodeSocket {
-    type Context = ws::WebsocketContext<Self, State>;
-
-    // Initiate the heartbeat process on start
-    fn started(&mut self, ctx: &mut Self::Context) {
-        self.hb(ctx);
-    }
-}
-
-// Handler for ws::Message
-impl StreamHandler<ws::Message, ws::ProtocolError> for NodeSocket {
-    fn handle(&mut self, msg: ws::Message, ctx: &mut Self::Context) {
-        match msg {
-            ws::Message::Ping(msg) => {
-                self.hb = Instant::now();
-                ctx.pong(&msg);
-            }
-            ws::Message::Pong(_) => {
-                self.hb = Instant::now();
-            }
-            ws::Message::Text(text) => {
-                ctx.state()
-                    .db
-                    .try_send(RawLog {
-                        ip_addr: self.ip.clone(),
-                        json: text,
-                    })
-                    .unwrap_or_else(|e| error!("{:?}", e));
-            }
-            ws::Message::Binary(_bin) => (),
-            ws::Message::Close(_) => {
-                ctx.stop();
-            }
-        }
-    }
-}
-
 // Private
 
 fn log_statics() {
@@ -161,7 +95,7 @@ fn log_statics() {
     info!("PURGE_FREQUENCY = {:?}", *PURGE_FREQUENCY);
     info!("LOG_EXPIRY_HOURS = {:?}", *LOG_EXPIRY_HOURS);
     info!("MAX_PENDING_CONNECTIONS = {:?}", *MAX_PENDING_CONNECTIONS);
-    info!("DATABASE_URL = {:?}", *DATABASE_URL);
+    info!("DATABASE_URL = *HIDDEN*");
     info!("DATABASE_POOL_SIZE = {:?}", *DATABASE_POOL_SIZE);
     info!("PORT = {:?}", *PORT);
 }
@@ -173,15 +107,4 @@ where
     env::var(var)
         .map_err(|_| ())
         .and_then(|v| v.parse().map_err(|_| ()))
-}
-
-// Websocket handshake and start actor
-fn ws_index(r: &HttpRequest<State>) -> Result<HttpResponse, Error> {
-    let ip = r
-        .connection_info()
-        .remote()
-        .unwrap_or("Unable to decode remote IP")
-        .to_string();
-    info!("Establishing connection to node: {}", ip);
-    ws::start(r, NodeSocket::new(ip))
 }

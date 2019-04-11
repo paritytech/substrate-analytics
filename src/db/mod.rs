@@ -1,8 +1,9 @@
 pub mod logs;
 pub mod models;
+pub mod stats;
 
-use ::actix::prelude::*;
-use ::actix_web::*;
+use actix::prelude::*;
+use actix_web::Error;
 use diesel;
 use diesel::pg::PgConnection;
 use diesel::r2d2::{ConnectionManager, Pool, PoolError};

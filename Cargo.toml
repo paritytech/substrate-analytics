@@ -16,6 +16,7 @@ chrono = { version = "0.4", features = ["serde"] }
 dotenv = "0.13.0"
 
 env_logger = "*"
+failure = "0.1.1"
 log = "*"
 futures = "0.1"
 
