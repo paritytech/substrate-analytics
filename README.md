@@ -6,6 +6,13 @@ Telemetry will be stored in a SQL database. Management of the database schema is
 
 Stored data is purged from the DB according to `LOG_EXPIRY_HOURS`
 
+#### Routes:
+
+- **/** - incoming telemetry (ws)
+- **/stats/node_list** - list of logged nodes
+- **/stats/peer_history/{ip address}** - peer count history for a 
+given node ip address (will match partial ip address)
+
 ### Set up for development and deployment
 
 - (for development) create a `.env` file in project root containing: (eg) 

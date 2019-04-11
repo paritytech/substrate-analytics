@@ -7,12 +7,13 @@ use serde_json::Value;
 
 use super::DbExecutor;
 
+/// Message to indicate what information is required
+/// Response is always json
 pub enum Query {
     PeerCounts { node_ip: String },
-    ListNodes,
+    Nodes,
 }
 
-//pub struct GetTopTenHottestYears;
 impl Message for Query {
     type Result = Result<Value, Error>;
 }
@@ -23,7 +24,7 @@ impl Handler<Query> for DbExecutor {
     fn handle(&mut self, msg: Query, _: &mut Self::Context) -> Self::Result {
         match msg {
             Query::PeerCounts { node_ip } => self.get_peer_counts(node_ip),
-            Query::ListNodes => self.list_nodes(),
+            Query::Nodes => self.get_nodes(),
         }
     }
 }
@@ -54,12 +55,16 @@ impl DbExecutor {
             )
             .bind::<Text, _>(format!("{}%", node_ip));
             let result: diesel::result::QueryResult<Vec<PeerCount>> = query.get_results(conn);
-            result.expect("")
+            result
         });
-        Ok(json!(result.expect("")))
+        match result {
+            Ok(Ok(v)) => Ok(json!(v)),
+            Ok(Err(e)) => Err(e.into()),
+            Err(e) => Err(e.into()),
+        }
     }
 
-    fn list_nodes(&self) -> Result<Value, Error> {
+    fn get_nodes(&self) -> Result<Value, Error> {
         let result = self.with_connection(|conn| {
             let query = "SELECT DISTINCT node_ip FROM substrate_logs";
             let result: diesel::result::QueryResult<Vec<Node>> =

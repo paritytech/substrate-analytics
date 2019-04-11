@@ -21,9 +21,9 @@ pub fn configure(app: App<State>) -> App<State> {
                     )
                 })
             })
-            .resource("/peer_list", |r| {
+            .resource("/nodes", |r| {
                 r.method(Method::GET)
-                    .f(|req| stats_query(req, Query::ListNodes))
+                    .f(|req| stats_query(req, Query::Nodes))
             })
     })
 }
@@ -33,7 +33,16 @@ fn stats_query(req: &HttpRequest<State>, query: Query) -> FutureResponse<HttpRes
         .db
         .send(query)
         .from_err()
-        .and_then(move |res| fut_ok(res.expect("Couldn't unwrap res"))) // TODO deal with this
+        .and_then(move |res| {
+            let res = match res {
+                Ok(r) => r,
+                Err(e) => {
+                    error!("Could not complete stats query: {}", e);
+                    json!("Error while processing query")
+                }
+            };
+            fut_ok(res)
+        })
         .and_then(|res| Ok(HttpResponse::Ok().json(res)))
         .responder()
 }
