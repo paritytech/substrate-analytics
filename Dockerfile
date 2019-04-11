@@ -4,14 +4,34 @@ RUN apt-get update && \
     DEBIAN_FRONTEND=noninteractive apt-get upgrade -y && \
     DEBIAN_FRONTEND=noninteractive apt-get install -y libpq-dev
 
+
+# build diesel first as there may be no changes and caching will be used
+RUN echo "building diesel-cli" && \
+  cargo install diesel_cli --root /substrate-save --bin diesel --force --no-default-features --features postgres
+
+
 WORKDIR /substrate-save
 
-ADD . .
+# speed up docker build using pre-build dependencies
+# http://whitfin.io/speeding-up-rust-docker-builds/
+RUN USER=root cargo init --bin
+
+# copy over your manifests
+COPY ./Cargo.lock ./Cargo.lock
+COPY ./Cargo.toml ./Cargo.toml
+
+# this build step will cache your dependencies
+RUN cargo build --release
+RUN rm src/*.rs
+
+# copy your source tree
+COPY ./src ./src
+
+
+ADD ./ ./
 
 RUN echo "building substrate-save" && \
   cargo build --release
-RUN echo "building diesel-cli" && \
-  cargo install diesel_cli --root /substrate-save --bin diesel --force --no-default-features --features postgres
 
 
 
@@ -39,6 +59,7 @@ COPY --from=builder /substrate-save/target/release/save /usr/local/bin/
 COPY --from=builder /substrate-save/migrations /save/migrations
 COPY --from=builder /substrate-save/bin/diesel /usr/local/bin/
 
+WORKDIR /save
 USER save
 ENV RUST_BACKTRACE 1
 

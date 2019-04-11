@@ -25,6 +25,10 @@ metadata:
   name: substrate-save
   namespace: $NAMESPACE
 spec:
+  selector:
+    matchLabels:
+      app: substrate-save
+
   replicas: $REPLICAS
   revisionHistoryLimit: 2
   minReadySeconds: 3
@@ -43,6 +47,12 @@ spec:
         - name: substrate-save
           image: $SUBSTRATE_SAVE_DOCKER_IMAGE
           imagePullPolicy: Always
+          # command: ["/bin/sh"]
+          # args:
+          #   - "-x"
+          #   - "-c"
+          #   - >
+          #     sleep 600
           ports:
           - containerPort: $WS_PORT
           env:
