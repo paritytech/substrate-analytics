@@ -5,7 +5,24 @@ use crate::db::logs::RawLog;
 use crate::{CLIENT_TIMEOUT, HEARTBEAT_INTERVAL};
 
 use actix::prelude::*;
-use actix_web::{http::Method, middleware, ws, App, Error, HttpRequest, HttpResponse};
+use actix_web::{http::Method, ws, App, Error, HttpRequest, HttpResponse};
+
+pub fn configure(app: App<State>) -> App<State> {
+    app.scope("", |scope| {
+        scope.resource("/", |r| r.method(Method::GET).f(ws_index))
+    })
+}
+
+// Websocket handshake and start actor
+fn ws_index(r: &HttpRequest<State>) -> Result<HttpResponse, Error> {
+    let ip = r
+        .connection_info()
+        .remote()
+        .unwrap_or("Unable to decode remote IP")
+        .to_string();
+    info!("Establishing ws connection to node: {}", ip);
+    ws::start(r, NodeSocket::new(ip))
+}
 
 struct NodeSocket {
     hb: Instant,
@@ -71,21 +88,4 @@ impl StreamHandler<ws::Message, ws::ProtocolError> for NodeSocket {
             }
         }
     }
-}
-
-pub fn configure(app: App<State>) -> App<State> {
-    app.scope("", |scope| {
-        scope.resource("/", |r| r.method(Method::GET).f(ws_index))
-    })
-}
-
-// Websocket handshake and start actor
-fn ws_index(r: &HttpRequest<State>) -> Result<HttpResponse, Error> {
-    let ip = r
-        .connection_info()
-        .remote()
-        .unwrap_or("Unable to decode remote IP")
-        .to_string();
-    info!("Establishing ws connection to node: {}", ip);
-    ws::start(r, NodeSocket::new(ip))
 }

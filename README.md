@@ -30,5 +30,3 @@ To allow logging you must set:
 - `RUST_LOG` to some log level
 
 ---
-
-There are some easy possibilities available for optimisation (eg. batching inserts).

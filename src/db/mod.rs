@@ -1,5 +1,6 @@
 pub mod logs;
 pub mod models;
+pub mod stats;
 
 use actix::prelude::*;
 use actix_web::Error;

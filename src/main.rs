@@ -7,6 +7,8 @@ extern crate diesel;
 extern crate lazy_static;
 #[macro_use]
 extern crate serde_derive;
+#[macro_use]
+extern crate serde_json;
 
 pub mod db;
 pub mod schema;
@@ -70,6 +72,7 @@ fn main() {
             db: db_arbiter.clone(),
         })
         .middleware(middleware::Logger::default());
+        app = web::stats::configure(app);
         app = web::root::configure(app);
         app
     })

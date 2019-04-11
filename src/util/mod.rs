@@ -1,5 +1,5 @@
-use ::actix::prelude::*;
-use ::actix_web::*;
+use actix::prelude::*;
+use actix_web::Error;
 use std::time::Duration;
 
 pub struct PeriodicAction<M: Message<Result = Result<(), Error>> + Send> {
