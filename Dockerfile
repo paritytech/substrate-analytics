@@ -22,13 +22,13 @@ COPY ./Cargo.toml ./Cargo.toml
 
 # this build step will cache your dependencies
 RUN cargo build --release
-RUN rm src/*.rs
+RUN rm -rf ./src ./target/release/deps/save-*
 
 # copy your source tree
 COPY ./src ./src
 
 
-ADD ./ ./
+# ADD ./ ./
 
 RUN echo "building substrate-save" && \
   cargo build --release
