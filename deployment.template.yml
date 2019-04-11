@@ -98,7 +98,6 @@ spec:
       protocol: TCP
   sessionAffinity: None
   type: LoadBalancer
-  # loadBalancerSourceRanges:
-  # - 10.13.0.0/19
-  # - 10.100.0.0/19
+  loadBalancerSourceRanges:
+  - 35.198.174.150/32 # test-machine
 
