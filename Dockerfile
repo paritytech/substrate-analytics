@@ -56,8 +56,9 @@ RUN apt-get update && \
 RUN useradd -m -u 1000 -U -s /bin/sh -d /save save
 
 COPY --from=builder /substrate-save/target/release/save /usr/local/bin/
-COPY --from=builder /substrate-save/migrations /save/migrations
 COPY --from=builder /substrate-save/bin/diesel /usr/local/bin/
+
+COPY ./migrations /save/migrations
 
 WORKDIR /save
 USER save
