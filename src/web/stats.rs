@@ -25,6 +25,10 @@ pub fn configure(app: App<State>) -> App<State> {
                 r.method(Method::GET)
                     .f(|req| stats_query(req, Query::Nodes))
             })
+            .resource("/db_size", |r| {
+                r.method(Method::GET)
+                    .f(|req| stats_query(req, Query::DbSize))
+            })
     })
 }
 
