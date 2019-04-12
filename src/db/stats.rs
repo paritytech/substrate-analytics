@@ -1,7 +1,7 @@
 use actix::prelude::*;
 use chrono::NaiveDateTime;
 use diesel::sql_types::*;
-use diesel::{sql_query, RunQueryDsl};
+use diesel::{result::QueryResult, sql_query, RunQueryDsl};
 use failure::Error;
 use serde_json::Value;
 
@@ -45,7 +45,7 @@ pub struct PeerCount {
 
 impl DbExecutor {
     fn get_peer_counts(&self, node_ip: String) -> Result<Value, Error> {
-        let result = self.with_connection(|conn| {
+        match self.with_connection(|conn| {
             let query = sql_query(
                 "SELECT CAST (logs->>'peers' as INTEGER) as peer_count, \
                  CAST (logs->>'ts' as TIMESTAMP) as ts \
@@ -54,10 +54,9 @@ impl DbExecutor {
                  AND node_ip LIKE $1",
             )
             .bind::<Text, _>(format!("{}%", node_ip));
-            let result: diesel::result::QueryResult<Vec<PeerCount>> = query.get_results(conn);
+            let result: QueryResult<Vec<PeerCount>> = query.get_results(conn);
             result
-        });
-        match result {
+        }) {
             Ok(Ok(v)) => Ok(json!(v)),
             Ok(Err(e)) => Err(e.into()),
             Err(e) => Err(e.into()),
@@ -65,12 +64,14 @@ impl DbExecutor {
     }
 
     fn get_nodes(&self) -> Result<Value, Error> {
-        let result = self.with_connection(|conn| {
+        match self.with_connection(|conn| {
             let query = "SELECT DISTINCT node_ip FROM substrate_logs";
-            let result: diesel::result::QueryResult<Vec<Node>> =
-                diesel::sql_query(query).get_results(conn);
-            result.expect("")
-        });
-        Ok(json!(result.expect("")))
+            let result: QueryResult<Vec<Node>> = diesel::sql_query(query).get_results(conn);
+            result
+        }) {
+            Ok(Ok(v)) => Ok(json!(v)),
+            Ok(Err(e)) => Err(e.into()),
+            Err(e) => Err(e.into()),
+        }
     }
 }
