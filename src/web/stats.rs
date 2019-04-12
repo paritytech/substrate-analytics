@@ -7,7 +7,7 @@ use futures::{future::ok as fut_ok, Future};
 pub fn configure(app: App<State>) -> App<State> {
     app.scope("stats", |scope| {
         scope
-            .resource("/peer_history/{node_ip}", |r| {
+            .resource("/nodes/{node_ip}/peer_counts", |r| {
                 r.method(Method::GET).f(|req| {
                     stats_query(
                         req,
@@ -24,6 +24,10 @@ pub fn configure(app: App<State>) -> App<State> {
             .resource("/nodes", |r| {
                 r.method(Method::GET)
                     .f(|req| stats_query(req, Query::Nodes))
+            })
+            .resource("/db_size", |r| {
+                r.method(Method::GET)
+                    .f(|req| stats_query(req, Query::DbSize))
             })
     })
 }
