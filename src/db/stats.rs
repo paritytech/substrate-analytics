@@ -37,6 +37,8 @@ pub struct Node {
 
 #[derive(Serialize, Deserialize, Debug, QueryableByName)]
 pub struct PeerCount {
+    #[sql_type = "Text"]
+    node_ip: String,
     #[sql_type = "Timestamp"]
     ts: NaiveDateTime,
     #[sql_type = "Integer"]
@@ -47,11 +49,14 @@ impl DbExecutor {
     fn get_peer_counts(&self, node_ip: String) -> Result<Value, Error> {
         match self.with_connection(|conn| {
             let query = sql_query(
-                "SELECT CAST (logs->>'peers' as INTEGER) as peer_count, \
+                "SELECT node_ip, \
+                 CAST (logs->>'peers' as INTEGER) as peer_count, \
                  CAST (logs->>'ts' as TIMESTAMP) as ts \
                  FROM substrate_logs \
                  WHERE logs->> 'msg' = 'system.interval' \
-                 AND node_ip LIKE $1",
+                 AND node_ip LIKE $1 \
+                 GROUP BY node_ip, logs \
+                 ORDER BY ts ASC",
             )
             .bind::<Text, _>(format!("{}%", node_ip));
             let result: QueryResult<Vec<PeerCount>> = query.get_results(conn);
