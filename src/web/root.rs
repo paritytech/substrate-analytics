@@ -1,14 +1,16 @@
 use std::time::Instant;
 
 use super::State;
-use crate::db::logs::RawLog;
+use crate::db::models::NewSubstrateLog;
 use crate::{CLIENT_TIMEOUT, HEARTBEAT_INTERVAL};
 
 use actix::prelude::*;
 use actix_web::{http::Method, ws, App, Error, HttpRequest, HttpResponse};
+use serde_json::Value;
 
 pub fn configure(app: App<State>) -> App<State> {
     app.scope("", |scope| {
+        // Polkadot 0.3 currently adds a trailing slash to the url
         scope.resource("/", |r| r.method(Method::GET).f(ws_index))
     })
 }
@@ -74,11 +76,18 @@ impl StreamHandler<ws::Message, ws::ProtocolError> for NodeSocket {
                 self.hb = Instant::now();
             }
             ws::Message::Text(text) => {
+                let logs: Value = match serde_json::from_str(&text) {
+                    Ok(a) => a,
+                    Err(e) => {
+                        error!("{:?}", e);
+                        return;
+                    }
+                };
                 ctx.state()
                     .db
-                    .try_send(RawLog {
-                        ip_addr: self.ip.clone(),
-                        json: text,
+                    .try_send(NewSubstrateLog {
+                        node_ip: self.ip.clone(),
+                        logs,
                     })
                     .unwrap_or_else(|e| error!("{:?}", e));
             }

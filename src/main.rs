@@ -72,6 +72,7 @@ fn main() {
             db: db_arbiter.clone(),
         })
         .middleware(middleware::Logger::default());
+        app = web::nodes::configure(app);
         app = web::stats::configure(app);
         app = web::root::configure(app);
         app
