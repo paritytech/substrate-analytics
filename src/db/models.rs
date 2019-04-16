@@ -2,7 +2,7 @@ use crate::schema::substrate_logs;
 use chrono::NaiveDateTime;
 use serde_json::Value;
 
-#[derive(Queryable, Identifiable, PartialEq, Debug)]
+#[derive(Queryable, QueryableByName, Identifiable, Serialize, PartialEq, Debug)]
 #[table_name = "substrate_logs"]
 pub struct SubstrateLog {
     pub id: i32,

@@ -8,11 +8,17 @@ Stored data is purged from the DB according to `LOG_EXPIRY_HOURS`
 
 #### Routes:
 
-- **/** - incoming telemetry (ws)
-- **/stats/nodes** - list of logged nodes
-- **/stats/nodes/{node ip address}/peer_counts** - peer count history for the 
+- base is just for incoming telemetry (ws) - set with this option: `--telemetry-url 'ws://127.0.0.1:8080 5'`
+- **/stats/db** - stats for db showing table / index sizes on disk
+- **/nodes** - list of logged nodes
+- **/nodes/{node ip address}/peer_counts** - peer count history for the 
 given node ip address (will also match beginning of ip address, eg: w/wo port)
-- **/stats/db_size** - stats for db showing table / index sizes on disk
+- **/nodes/{node ip address}/recent_logs** - recent log messages, unprocessed (will also match beginning of ip address, eg: w/wo port)
+
+`peer_counts` and `recent_logs` take the following OPTIONAL parameters (with sensible defaults if not specified):
+- `start_time` in the format: `2019-01-01T00:00:00`
+- `end_time` in the format: `2019-01-01T00:00:00`
+- `limit` in the format: `100`
 
 ### Set up for development and deployment
 
