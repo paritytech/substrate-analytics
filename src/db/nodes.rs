@@ -10,7 +10,7 @@ use crate::db::filters::Filters;
 use crate::db::models::SubstrateLog;
 
 pub enum NodeQueryType {
-    PeerCounts,
+    PeerInfo,
     RecentLogs,
 }
 
@@ -40,7 +40,7 @@ impl Handler<NodesQuery> for DbExecutor {
                 filters,
                 kind,
             } => match kind {
-                NodeQueryType::PeerCounts => self.get_peer_counts(node_ip, filters),
+                NodeQueryType::PeerInfo => self.get_peer_counts(node_ip, filters),
                 NodeQueryType::RecentLogs => self.get_recent_logs(node_ip, filters),
             },
         }
@@ -54,13 +54,45 @@ pub struct Node {
 }
 
 #[derive(Serialize, Deserialize, Debug, QueryableByName)]
-pub struct PeerCount {
+pub struct PeerInfoDb {
     #[sql_type = "Text"]
     node_ip: String,
     #[sql_type = "Timestamp"]
     ts: NaiveDateTime,
     #[sql_type = "Integer"]
     peer_count: i32,
+    #[sql_type = "Nullable<Jsonb>"]
+    not_connected: Option<Value>,
+}
+
+impl PeerInfoDb {
+    pub fn get_not_connected(&self) -> Option<usize> {
+        if let Some(value) = &self.not_connected {
+            if let Some(obj) = value.as_object() {
+                return Some(obj.len());
+            }
+        }
+        None
+    }
+}
+
+#[derive(Serialize, Deserialize, Debug)]
+pub struct PeerInfo {
+    node_ip: String,
+    ts: NaiveDateTime,
+    peers_connected: i32,
+    not_connected: Option<usize>,
+}
+
+impl From<PeerInfoDb> for PeerInfo {
+    fn from(p: PeerInfoDb) -> Self {
+        PeerInfo {
+            not_connected: p.get_not_connected(),
+            node_ip: p.node_ip,
+            ts: p.ts,
+            peers_connected: p.peer_count,
+        }
+    }
 }
 
 impl DbExecutor {
@@ -69,7 +101,8 @@ impl DbExecutor {
             let query = sql_query(
                 "SELECT node_ip, \
                  CAST (logs->>'peers' as INTEGER) as peer_count, \
-                 CAST (logs->>'ts' as TIMESTAMP) as ts \
+                 CAST (logs->>'ts' as TIMESTAMP) as ts, \
+                 logs->'network_state'->'notConnectedPeers' as not_connected \
                  FROM substrate_logs \
                  WHERE logs->>'msg' = 'system.interval' \
                  AND node_ip LIKE $1 \
@@ -95,10 +128,13 @@ impl DbExecutor {
                 "get_peer_counts query: {}",
                 diesel::debug_query::<diesel::pg::Pg, _>(&query)
             );
-            let result: QueryResult<Vec<PeerCount>> = query.get_results(conn);
+            let result: QueryResult<Vec<PeerInfoDb>> = query.get_results(conn);
             result
         }) {
-            Ok(Ok(v)) => Ok(json!(v)),
+            Ok(Ok(v)) => {
+                let ncs: Vec<PeerInfo> = v.into_iter().map(|r| PeerInfo::from(r)).collect();
+                Ok(json!(ncs))
+            }
             Ok(Err(e)) => Err(e.into()),
             Err(e) => Err(e.into()),
         }

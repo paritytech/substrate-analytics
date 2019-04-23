@@ -35,7 +35,7 @@ fn peer_counts(req: &HttpRequest<State>) -> FutureResponse<HttpResponse> {
             NodesQuery::Node {
                 node_ip,
                 filters,
-                kind: NodeQueryType::PeerCounts,
+                kind: NodeQueryType::PeerInfo,
             },
         ),
         Err(errors) => {
