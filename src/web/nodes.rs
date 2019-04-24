@@ -16,11 +16,38 @@ pub fn configure(app: App<State>) -> App<State> {
             .resource("/{node_ip}/recent_logs", |r| {
                 r.method(Method::GET).f(recent_logs)
             })
+            .resource("/{node_ip}/log_stats", |r| {
+                r.method(Method::GET).f(log_stats)
+            })
             .resource("", |r| {
                 r.method(Method::GET)
                     .f(|req| send_query(req, NodesQuery::AllNodes))
             })
     })
+}
+
+fn log_stats(req: &HttpRequest<State>) -> FutureResponse<HttpResponse> {
+    let node_ip = req
+        .match_info()
+        .get("node_ip")
+        .expect("node_ip should be available because the route matched")
+        .to_string();
+    match Filters::from_hashmap(req.query()) {
+        Ok(filters) => send_query(
+            req,
+            NodesQuery::Node {
+                node_ip,
+                filters,
+                kind: NodeQueryType::LogStats,
+            },
+        ),
+        Err(errors) => {
+            debug!("Error parsing peer count params - {:?}", errors);
+            Box::new(fut_ok(
+                HttpResponse::BadRequest().json(json!(errors)).into(),
+            ))
+        }
+    }
 }
 
 fn peer_counts(req: &HttpRequest<State>) -> FutureResponse<HttpResponse> {
@@ -35,7 +62,7 @@ fn peer_counts(req: &HttpRequest<State>) -> FutureResponse<HttpResponse> {
             NodesQuery::Node {
                 node_ip,
                 filters,
-                kind: NodeQueryType::PeerCounts,
+                kind: NodeQueryType::PeerInfo,
             },
         ),
         Err(errors) => {
