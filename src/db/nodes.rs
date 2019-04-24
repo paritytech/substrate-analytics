@@ -12,6 +12,7 @@ use crate::db::models::SubstrateLog;
 pub enum NodeQueryType {
     PeerInfo,
     RecentLogs,
+    LogStats,
 }
 
 /// Message to indicate what information is required
@@ -42,6 +43,7 @@ impl Handler<NodesQuery> for DbExecutor {
             } => match kind {
                 NodeQueryType::PeerInfo => self.get_peer_counts(node_ip, filters),
                 NodeQueryType::RecentLogs => self.get_recent_logs(node_ip, filters),
+                NodeQueryType::LogStats => self.get_log_stats(node_ip),
             },
         }
     }
@@ -95,7 +97,36 @@ impl From<PeerInfoDb> for PeerInfo {
     }
 }
 
+#[derive(Serialize, Deserialize, Debug, QueryableByName)]
+pub struct LogStats {
+    #[sql_type = "BigInt"]
+    pub qty: i64,
+    #[sql_type = "Text"]
+    pub log_type: String,
+}
+
 impl DbExecutor {
+    fn get_log_stats(&self, node_ip: String) -> Result<Value, Error> {
+        match self.with_connection(|conn| {
+            let query = sql_query(
+                "SELECT COUNT(log_type) as qty, log_type \
+                 FROM (SELECT logs->>'msg' as log_type from substrate_logs WHERE node_ip LIKE $1) t \
+                 GROUP BY t.log_type",
+            )
+            .bind::<Text, _>(format!("{}%", node_ip));
+            debug!(
+                "get_log_stats query: {}",
+                diesel::debug_query::<diesel::pg::Pg, _>(&query)
+            );
+            let result: QueryResult<Vec<LogStats>> = query.get_results(conn);
+            result
+        }) {
+            Ok(Ok(v)) => Ok(json!(v)),
+            Ok(Err(e)) => Err(e.into()),
+            Err(e) => Err(e.into()),
+        }
+    }
+
     fn get_peer_counts(&self, node_ip: String, filters: Filters) -> Result<Value, Error> {
         match self.with_connection(|conn| {
             let query = sql_query(

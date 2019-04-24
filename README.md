@@ -13,7 +13,8 @@ Stored data is purged from the DB according to `LOG_EXPIRY_HOURS`
 - **/nodes** - list of logged nodes
 - **/nodes/{node ip address}/peer_counts** - peer count history for the 
 given node ip address (will also match beginning of ip address, eg: w/wo port)
-- **/nodes/{node ip address}/recent_logs** - recent log messages, unprocessed (will also match beginning of ip address, eg: w/wo port)
+- **/nodes/{node ip address}/recent_logs** - recent log messages, unprocessed
+- **/nodes/{node ip address}/log_stats** - shows the quantity of each type of log message received
 
 `peer_counts` and `recent_logs` take the following OPTIONAL parameters (with sensible defaults if not specified):
 - `start_time` in the format: `2019-01-01T00:00:00`
