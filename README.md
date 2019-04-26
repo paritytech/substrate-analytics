@@ -47,13 +47,10 @@ To allow logging you must set:
 
 Limitations:
 
-Log messages are batched together before `INSERT` 
+Log messages are batched together in each actor before `INSERT` 
 \- up to 128 messages or 100ms, whichever is reached sooner. 
 However, an insert is only triggered on receipt of a log message, 
 (if the check on the above conditions is true). 
-In a worst case scenario, there may be up to 127 logs in memory 
-that are not persisted to the DB until another message is received, 
-(only if they all arrived in under 100ms 
-and no more messages were sent subsequently).
+Batches are local to each actor in the system.
 
 ---
