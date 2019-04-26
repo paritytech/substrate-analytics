@@ -13,9 +13,10 @@ pub fn configure(app: App<State>) -> App<State> {
             .resource("/{node_ip}/peer_counts", |r| {
                 r.method(Method::GET).f(peer_counts)
             })
-            .resource("/{node_ip}/recent_logs", |r| {
-                r.method(Method::GET).f(recent_logs)
+            .resource("/{node_ip}/logs/{msg_type}", |r| {
+                r.method(Method::GET).f(logs)
             })
+            .resource("/{node_ip}/logs", |r| r.method(Method::GET).f(all_logs))
             .resource("/{node_ip}/log_stats", |r| {
                 r.method(Method::GET).f(log_stats)
             })
@@ -74,7 +75,7 @@ fn peer_counts(req: &HttpRequest<State>) -> FutureResponse<HttpResponse> {
     }
 }
 
-fn recent_logs(req: &HttpRequest<State>) -> FutureResponse<HttpResponse> {
+fn all_logs(req: &HttpRequest<State>) -> FutureResponse<HttpResponse> {
     let node_ip = req
         .match_info()
         .get("node_ip")
@@ -86,7 +87,36 @@ fn recent_logs(req: &HttpRequest<State>) -> FutureResponse<HttpResponse> {
             NodesQuery::Node {
                 node_ip,
                 filters,
-                kind: NodeQueryType::RecentLogs,
+                kind: NodeQueryType::AllLogs,
+            },
+        ),
+        Err(errors) => {
+            debug!("Error parsing peer count params - {:?}", errors);
+            Box::new(fut_ok(
+                HttpResponse::BadRequest().json(json!(errors)).into(),
+            ))
+        }
+    }
+}
+
+fn logs(req: &HttpRequest<State>) -> FutureResponse<HttpResponse> {
+    let node_ip = req
+        .match_info()
+        .get("node_ip")
+        .expect("node_ip should be available because the route matched")
+        .to_string();
+    let msg_type = req
+        .match_info()
+        .get("msg_type")
+        .expect("msg_type should be available because the route matched")
+        .to_string();
+    match Filters::from_hashmap(req.query()) {
+        Ok(filters) => send_query(
+            req,
+            NodesQuery::Node {
+                node_ip,
+                filters,
+                kind: NodeQueryType::Logs(msg_type),
             },
         ),
         Err(errors) => {

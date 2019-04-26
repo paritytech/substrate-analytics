@@ -11,7 +11,8 @@ use crate::db::models::SubstrateLog;
 
 pub enum NodeQueryType {
     PeerInfo,
-    RecentLogs,
+    AllLogs,
+    Logs(String),
     LogStats,
 }
 
@@ -42,7 +43,8 @@ impl Handler<NodesQuery> for DbExecutor {
                 kind,
             } => match kind {
                 NodeQueryType::PeerInfo => self.get_peer_counts(node_ip, filters),
-                NodeQueryType::RecentLogs => self.get_recent_logs(node_ip, filters),
+                NodeQueryType::AllLogs => self.get_all_logs(node_ip, filters),
+                NodeQueryType::Logs(msg_type) => self.get_logs(node_ip, msg_type, filters),
                 NodeQueryType::LogStats => self.get_log_stats(node_ip),
             },
         }
@@ -183,7 +185,7 @@ impl DbExecutor {
         }
     }
 
-    fn get_recent_logs(&self, node_ip: String, filters: Filters) -> Result<Value, Error> {
+    fn get_all_logs(&self, node_ip: String, filters: Filters) -> Result<Value, Error> {
         match self.with_connection(|conn| {
             let query = sql_query(
                 "SELECT id, \
@@ -208,6 +210,52 @@ impl DbExecutor {
                     .end_time
                     .unwrap_or_else(|| NaiveDateTime::from_timestamp(Utc::now().timestamp(), 0)),
             )
+            .bind::<Integer, _>(filters.limit.unwrap_or(100));
+            debug!(
+                "get_recent_logs query: {}",
+                diesel::debug_query::<diesel::pg::Pg, _>(&query)
+            );
+            let result: QueryResult<Vec<SubstrateLog>> = query.get_results(conn);
+            result
+        }) {
+            Ok(Ok(v)) => Ok(json!(v)),
+            Ok(Err(e)) => Err(e.into()),
+            Err(e) => Err(e.into()),
+        }
+    }
+
+    fn get_logs(
+        &self,
+        node_ip: String,
+        msg_type: String,
+        filters: Filters,
+    ) -> Result<Value, Error> {
+        match self.with_connection(|conn| {
+            let query = sql_query(
+                "SELECT id, \
+                 node_ip, \
+                 logs, \
+                 created_at \
+                 FROM substrate_logs \
+                 WHERE node_ip LIKE $1 \
+                 AND created_at > $2 \
+                 AND created_at < $3 \
+                 AND logs->>'msg' = $4
+                 ORDER BY created_at DESC \
+                 LIMIT $5",
+            )
+            .bind::<Text, _>(format!("{}%", node_ip))
+            .bind::<Timestamp, _>(
+                filters
+                    .start_time
+                    .unwrap_or_else(|| NaiveDateTime::from_timestamp(0, 0)),
+            )
+            .bind::<Timestamp, _>(
+                filters
+                    .end_time
+                    .unwrap_or_else(|| NaiveDateTime::from_timestamp(Utc::now().timestamp(), 0)),
+            )
+            .bind::<Text, _>(msg_type)
             .bind::<Integer, _>(filters.limit.unwrap_or(100));
             debug!(
                 "get_recent_logs query: {}",
