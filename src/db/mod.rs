@@ -26,7 +26,7 @@ impl Actor for DbExecutor {
 }
 
 impl DbExecutor {
-    // Execute query, returning result. Log error if any and return result.
+    // Execute query, log error if any and return result.
     fn with_connection<F, R>(&self, f: F) -> Result<R, PoolError>
     where
         F: FnOnce(&PgConnection) -> R,
@@ -38,7 +38,7 @@ impl DbExecutor {
         result
     }
 
-    // Creates a new DbExecutor, with connection pool
+    // Creates a new DbExecutor
     pub fn new(pool: Pool<ConnectionManager<PgConnection>>) -> Self {
         let log_batch = LogBatch::new();
         DbExecutor { pool, log_batch }
