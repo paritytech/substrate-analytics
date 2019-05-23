@@ -20,6 +20,9 @@ pub fn configure(app: App<State>) -> App<State> {
             .resource("/{node_ip}/log_stats", |r| {
                 r.method(Method::GET).f(log_stats)
             })
+            .resource("/{node_ip}/log_stats", |r| {
+                r.method(Method::GET).f(log_stats)
+            })
             .resource("", |r| {
                 r.method(Method::GET)
                     .f(|req| send_query(req, NodesQuery::AllNodes))

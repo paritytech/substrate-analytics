@@ -101,4 +101,8 @@ spec:
   loadBalancerSourceRanges:
   - 35.198.174.150/32 # test-machine
   - 212.227.252.235/32 # vpn-server
+  - 35.246.224.91/32 # substrate20-0
+  - 35.246.210.11/32 # substrate20-1
+  - 35.198.110.45/32 # substrate20-2
+  - 35.198.114.154/32 # substrate20-3
 
