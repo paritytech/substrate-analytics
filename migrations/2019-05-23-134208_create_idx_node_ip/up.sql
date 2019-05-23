@@ -1,0 +1,1 @@
+CREATE INDEX substrate_logs_node_ip_idx ON substrate_logs (node_ip);
