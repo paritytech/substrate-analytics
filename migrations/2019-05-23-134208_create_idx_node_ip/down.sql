@@ -1,0 +1,1 @@
+DROP INDEX substrate_logs_node_ip_idx;
