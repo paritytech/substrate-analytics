@@ -1,14 +1,24 @@
 ## Substrate Save
 
 Comprises a websocket server accepting incoming telemetry from multiple 
-[Substrate](https://github.com/paritytech/substrate) nodes. 
-Telemetry will be stored in a SQL database. Management of the database schema is via diesel migrations.
+[Substrate](https://github.com/paritytech/substrate) nodes. Substrate-save is designed to be resilient (to network errors), 
+performant and easily horizontally scalable by deploying more servers.
+
+Telemetry is stored in a PostgreSQL database. Management of the database schema is via `diesel` migrations.
 
 Stored data is purged from the DB according to `LOG_EXPIRY_HOURS`
 
+For convenience there are also some JSON endpoints to make ad-hoc queries, although it is expected that 
+the data is accessed directly from the database by a suitable dashboard (eg. Grafana).
+
+The next phase of the project with be to parse and structure the incoming logs into 
+appropriate (to be determined) database tables.
+
 #### Routes:
 
-- base is just for incoming telemetry (ws) - set with this option: `--telemetry-url 'ws://127.0.0.1:8080 5'`
+- **/** - is just for incoming telemetry (ws) - set with this option in substrate cli: `--telemetry-url 'ws://127.0.0.1:8080 5'`
+
+JSON endpoints for convenience:
 - **/stats/db** - stats for db showing table / index sizes on disk
 - **/nodes** - list of logged nodes
 - **/nodes/{node ip address}/peer_counts** - peer count history for the 
