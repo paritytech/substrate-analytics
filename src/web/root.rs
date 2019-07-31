@@ -44,10 +44,10 @@ impl NodeSocket {
         ctx.run_interval(*HEARTBEAT_INTERVAL, move |act, ctx| {
             if Instant::now().duration_since(act.hb) > *CLIENT_TIMEOUT {
                 info!(
-                    "Websocket heartbeat failed for node: {}, disconnecting!",
+                    "Websocket heartbeat failed for node: {}", // TODO re-add 'disconnecting' to msg
                     ip
                 );
-                ctx.stop();
+                // ctx.stop(); TODO re-enable this once substrate is fixed and responding to PING
                 return;
             }
             ctx.ping("");
@@ -67,34 +67,50 @@ impl Actor for NodeSocket {
 // Handler for ws::Message
 impl StreamHandler<ws::Message, ws::ProtocolError> for NodeSocket {
     fn handle(&mut self, msg: ws::Message, ctx: &mut Self::Context) {
+        let ip = self.ip.clone();
+        let mut logs: Option<Value> = None;
         match msg {
             ws::Message::Ping(msg) => {
+                debug!("PING from: {}", ip);
                 self.hb = Instant::now();
                 ctx.pong(&msg);
             }
             ws::Message::Pong(_) => {
+                debug!("PONG from: {}", ip);
                 self.hb = Instant::now();
             }
             ws::Message::Text(text) => {
-                let logs: Value = match serde_json::from_str(&text) {
-                    Ok(a) => a,
+                trace!("TEXT from: {} - {}", ip, text);
+                logs = match serde_json::from_str(&text) {
+                    Ok(a) => Some(a),
                     Err(e) => {
                         error!("{:?}", e);
                         return;
                     }
                 };
-                ctx.state()
-                    .db
-                    .try_send(NewSubstrateLog {
-                        node_ip: self.ip.clone(),
-                        logs,
-                    })
-                    .unwrap_or_else(|e| error!("{:?}", e));
             }
-            ws::Message::Binary(_bin) => (),
+            ws::Message::Binary(mut bin) => {
+                trace!("BINARY from: {} - {:?}", ip, bin);
+                logs = match serde_json::from_slice(&bin.take()[..]) {
+                    Ok(a) => Some(a),
+                    Err(e) => {
+                        error!("{:?}", e);
+                        return;
+                    }
+                };
+            }
             ws::Message::Close(_) => {
                 ctx.stop();
             }
+        }
+        if let Some(logs) = logs {
+            ctx.state()
+                .db
+                .try_send(NewSubstrateLog {
+                    node_ip: self.ip.clone(),
+                    logs,
+                })
+                .unwrap_or_else(|e| error!("Failed to send log to DB actor - {:?}", e));
         }
     }
 }
