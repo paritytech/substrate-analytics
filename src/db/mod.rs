@@ -5,7 +5,6 @@ pub mod nodes;
 pub mod stats;
 
 use actix::prelude::*;
-use actix_web::Error;
 use diesel;
 use diesel::pg::PgConnection;
 use diesel::r2d2::{ConnectionManager, Pool, PoolError};
@@ -61,11 +60,11 @@ impl DbExecutor {
 }
 
 impl Message for NewSubstrateLog {
-    type Result = Result<(), Error>;
+    type Result = Result<(), &'static str>;
 }
 
 impl Handler<NewSubstrateLog> for DbExecutor {
-    type Result = Result<(), Error>;
+    type Result = Result<(), &'static str>;
 
     fn handle(&mut self, msg: NewSubstrateLog, _: &mut Self::Context) -> Self::Result {
         self.log_batch.rows.push(msg);
@@ -85,11 +84,11 @@ pub struct CreateSubstrateLog {
 }
 
 impl Message for CreateSubstrateLog {
-    type Result = Result<(), Error>;
+    type Result = Result<(), &'static str>;
 }
 
 impl Handler<CreateSubstrateLog> for DbExecutor {
-    type Result = Result<(), Error>;
+    type Result = Result<(), &'static str>;
 
     fn handle(&mut self, msg: CreateSubstrateLog, _: &mut Self::Context) -> Self::Result {
         let _ = self.with_connection(|conn| {
@@ -115,11 +114,11 @@ pub struct PurgeLogs {
 }
 
 impl Message for PurgeLogs {
-    type Result = Result<(), Error>;
+    type Result = Result<(), &'static str>;
 }
 
 impl Handler<PurgeLogs> for DbExecutor {
-    type Result = Result<(), Error>;
+    type Result = Result<(), &'static str>;
 
     fn handle(&mut self, msg: PurgeLogs, _: &mut Self::Context) -> Self::Result {
         let _ = self.with_connection(|conn| {

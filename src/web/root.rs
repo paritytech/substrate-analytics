@@ -1,40 +1,46 @@
 use std::time::Instant;
 
-use super::State;
-use crate::db::models::NewSubstrateLog;
+use crate::db::{models::NewSubstrateLog, DbExecutor};
 use crate::{CLIENT_TIMEOUT, HEARTBEAT_INTERVAL};
 
 use actix::prelude::*;
-use actix_web::{http::Method, ws, App, Error, HttpRequest, HttpResponse};
+//use actix_http::body::Body;
+use actix_web::{web as a_web, Error, HttpRequest, HttpResponse};
+use actix_web_actors::ws;
 use serde_json::Value;
 
-pub fn configure(app: App<State>) -> App<State> {
-    app.scope("", |scope| {
-        // Polkadot 0.3 currently adds a trailing slash to the url
-        scope.resource("/", |r| r.method(Method::GET).f(ws_index))
-    })
+pub fn configure(cfg: &mut a_web::ServiceConfig) {
+    cfg.service(
+        a_web::scope("/").service(a_web::resource("").route(a_web::get().to_async(ws_index))),
+    );
 }
 
 // Websocket handshake and start actor
-fn ws_index(r: &HttpRequest<State>) -> Result<HttpResponse, Error> {
+fn ws_index(
+    r: HttpRequest,
+    stream: a_web::Payload,
+    db: a_web::Data<Addr<DbExecutor>>,
+) -> Result<HttpResponse, Error> {
     let ip = r
         .connection_info()
         .remote()
         .unwrap_or("Unable to decode remote IP")
         .to_string();
     info!("Establishing ws connection to node: {}", ip);
-    ws::start(r, NodeSocket::new(ip))
+    ws::start(NodeSocket::new(ip, db), &r, stream)
 }
 
 struct NodeSocket {
     hb: Instant,
     ip: String,
+    db: a_web::Data<Addr<DbExecutor>>,
 }
 
 impl NodeSocket {
-    fn new(ip: String) -> Self {
+    fn new(ip: String, db: a_web::Data<Addr<DbExecutor>>) -> Self {
         Self {
             ip,
+            db,
             hb: Instant::now(),
         }
     }
@@ -56,7 +62,7 @@ impl NodeSocket {
 }
 
 impl Actor for NodeSocket {
-    type Context = ws::WebsocketContext<Self, State>;
+    type Context = ws::WebsocketContext<Self>;
 
     // Initiate the heartbeat process on start
     fn started(&mut self, ctx: &mut Self::Context) {
@@ -89,9 +95,9 @@ impl StreamHandler<ws::Message, ws::ProtocolError> for NodeSocket {
                     }
                 };
             }
-            ws::Message::Binary(mut bin) => {
+            ws::Message::Binary(bin) => {
                 trace!("BINARY from: {} - {:?}", ip, bin);
-                logs = match serde_json::from_slice(&bin.take()[..]) {
+                logs = match serde_json::from_slice(&bin[..]) {
                     Ok(a) => Some(a),
                     Err(e) => {
                         error!("{:?}", e);
@@ -102,10 +108,10 @@ impl StreamHandler<ws::Message, ws::ProtocolError> for NodeSocket {
             ws::Message::Close(_) => {
                 ctx.stop();
             }
+            ws::Message::Nop => (),
         }
         if let Some(logs) = logs {
-            ctx.state()
-                .db
+            self.db
                 .try_send(NewSubstrateLog {
                     node_ip: self.ip.clone(),
                     logs,

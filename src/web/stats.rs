@@ -1,21 +1,19 @@
-use super::State;
-use crate::db::stats::Query;
-
-use actix_web::{http::Method, App, AsyncResponder, FutureResponse, HttpRequest, HttpResponse};
+use crate::db::{stats::Query, DbExecutor};
+use actix::prelude::*;
+use actix_web::{web as a_web, Error as AWError, HttpResponse};
 use futures::Future;
 
-pub fn configure(app: App<State>) -> App<State> {
-    app.scope("stats", |scope| {
-        scope.resource("/db", |r| {
-            r.method(Method::GET).f(|req| send_query(req, Query::Db))
-        })
-    })
+pub fn configure(cfg: &mut a_web::ServiceConfig) {
+    cfg.service(
+        a_web::scope("stats")
+            .service(a_web::resource("/db").route(a_web::get().to_async(send_query))),
+    );
 }
 
-fn send_query(req: &HttpRequest<State>, query: Query) -> FutureResponse<HttpResponse> {
-    req.state()
-        .db
-        .send(query)
+fn send_query(
+    db: a_web::Data<Addr<DbExecutor>>,
+) -> impl Future<Item = HttpResponse, Error = AWError> {
+    db.send(Query::Db)
         .from_err()
         .and_then(move |res| match res {
             Ok(r) => Ok(HttpResponse::Ok().json(r)),
@@ -24,5 +22,4 @@ fn send_query(req: &HttpRequest<State>, query: Query) -> FutureResponse<HttpResp
                 Ok(HttpResponse::InternalServerError().json(json!("Error while processing query")))
             }
         })
-        .responder()
 }

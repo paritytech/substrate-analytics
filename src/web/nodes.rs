@@ -1,108 +1,113 @@
-use super::State;
 use crate::db::{
     filters::Filters,
     nodes::{NodeQueryType, NodesQuery},
 };
 
-use actix_web::{http::Method, App, AsyncResponder, FutureResponse, HttpRequest, HttpResponse};
-use futures::{future::ok as fut_ok, Future};
+use crate::db::*;
+use actix::prelude::*;
+use actix_web::{web as a_web, Error as AWError, HttpRequest, HttpResponse};
+use futures::Future;
 
-pub fn configure(app: App<State>) -> App<State> {
-    app.scope("nodes", |scope| {
-        scope
-            .resource("/{node_ip}/peer_counts", |r| {
-                r.method(Method::GET).f(peer_counts)
-            })
-            .resource("/{node_ip}/logs/{msg_type}", |r| {
-                r.method(Method::GET).f(logs)
-            })
-            .resource("/{node_ip}/logs", |r| r.method(Method::GET).f(all_logs))
-            .resource("/{node_ip}/log_stats", |r| {
-                r.method(Method::GET).f(log_stats)
-            })
-            .resource("/{node_ip}/log_stats", |r| {
-                r.method(Method::GET).f(log_stats)
-            })
-            .resource("", |r| {
-                r.method(Method::GET)
-                    .f(|req| send_query(req, NodesQuery::AllNodes))
-            })
-    })
+pub fn configure(cfg: &mut a_web::ServiceConfig) {
+    cfg.service(
+        a_web::scope("/nodes")
+            .route("/{node_ip}/peer_counts", a_web::get().to_async(peer_counts))
+            .route("/{node_ip}/logs/{msg_type}", a_web::get().to_async(logs))
+            .route("/{node_ip}/logs", a_web::get().to_async(all_logs))
+            .route("/{node_ip}/log_stats", a_web::get().to_async(log_stats))
+            .route("/{node_ip}/log_stats", a_web::get().to_async(log_stats))
+            .route("", a_web::get().to_async(all_nodes)),
+    );
 }
 
-fn log_stats(req: &HttpRequest<State>) -> FutureResponse<HttpResponse> {
+fn all_nodes(
+    db: a_web::Data<Addr<DbExecutor>>,
+) -> impl Future<Item = HttpResponse, Error = AWError> {
+    send_query(NodesQuery::AllNodes, db)
+}
+
+fn log_stats(
+    req: HttpRequest,
+    db: a_web::Data<Addr<DbExecutor>>,
+) -> impl Future<Item = HttpResponse, Error = AWError> {
     let node_ip = req
         .match_info()
         .get("node_ip")
         .expect("node_ip should be available because the route matched")
         .to_string();
-    match Filters::from_hashmap(req.query()) {
-        Ok(filters) => send_query(
-            req,
-            NodesQuery::Node {
-                node_ip,
-                filters,
-                kind: NodeQueryType::LogStats,
-            },
-        ),
-        Err(errors) => {
-            debug!("Error parsing peer count params - {:?}", errors);
-            Box::new(fut_ok(
-                HttpResponse::BadRequest().json(json!(errors)).into(),
-            ))
+    let filters = match a_web::Query::<Filters>::from_query(&req.query_string()) {
+        Ok(f) => f.clone(),
+        Err(_) => {
+            warn!("Error deserializing Filters from querystring");
+            Filters::default()
         }
-    }
+    };
+    send_query(
+        NodesQuery::Node {
+            node_ip,
+            filters,
+            kind: NodeQueryType::LogStats,
+        },
+        db,
+    )
 }
 
-fn peer_counts(req: &HttpRequest<State>) -> FutureResponse<HttpResponse> {
+fn peer_counts(
+    req: HttpRequest,
+    db: a_web::Data<Addr<DbExecutor>>,
+) -> impl Future<Item = HttpResponse, Error = AWError> {
     let node_ip = req
         .match_info()
         .get("node_ip")
         .expect("node_ip should be available because the route matched")
         .to_string();
-    match Filters::from_hashmap(req.query()) {
-        Ok(filters) => send_query(
-            req,
-            NodesQuery::Node {
-                node_ip,
-                filters,
-                kind: NodeQueryType::PeerInfo,
-            },
-        ),
-        Err(errors) => {
-            debug!("Error parsing peer count params - {:?}", errors);
-            Box::new(fut_ok(
-                HttpResponse::BadRequest().json(json!(errors)).into(),
-            ))
+    let filters = match a_web::Query::<Filters>::from_query(&req.query_string()) {
+        Ok(f) => f.clone(),
+        Err(_) => {
+            warn!("Error deserializing Filters from querystring");
+            Filters::default()
         }
-    }
+    };
+    send_query(
+        NodesQuery::Node {
+            node_ip,
+            filters,
+            kind: NodeQueryType::PeerInfo,
+        },
+        db,
+    )
 }
 
-fn all_logs(req: &HttpRequest<State>) -> FutureResponse<HttpResponse> {
+fn all_logs(
+    req: HttpRequest,
+    db: a_web::Data<Addr<DbExecutor>>,
+) -> impl Future<Item = HttpResponse, Error = AWError> {
     let node_ip = req
         .match_info()
         .get("node_ip")
         .expect("node_ip should be available because the route matched")
         .to_string();
-    match Filters::from_hashmap(req.query()) {
-        Ok(filters) => send_query(
-            req,
-            NodesQuery::Node {
-                node_ip,
-                filters,
-                kind: NodeQueryType::AllLogs,
-            },
-        ),
-        Err(errors) => {
-            debug!("Error parsing peer count params - {:?}", errors);
-            Box::new(fut_ok(
-                HttpResponse::BadRequest().json(json!(errors)).into(),
-            ))
+    let filters = match a_web::Query::<Filters>::from_query(&req.query_string()) {
+        Ok(f) => f.clone(),
+        Err(_) => {
+            warn!("Error deserializing Filters from querystring");
+            Filters::default()
         }
-    }
+    };
+    send_query(
+        NodesQuery::Node {
+            node_ip,
+            filters,
+            kind: NodeQueryType::AllLogs,
+        },
+        db,
+    )
 }
 
-fn logs(req: &HttpRequest<State>) -> FutureResponse<HttpResponse> {
+fn logs(
+    req: HttpRequest,
+    db: a_web::Data<Addr<DbExecutor>>,
+) -> impl Future<Item = HttpResponse, Error = AWError> {
     let node_ip = req
         .match_info()
         .get("node_ip")
@@ -113,35 +118,33 @@ fn logs(req: &HttpRequest<State>) -> FutureResponse<HttpResponse> {
         .get("msg_type")
         .expect("msg_type should be available because the route matched")
         .to_string();
-    match Filters::from_hashmap(req.query()) {
-        Ok(filters) => send_query(
-            req,
-            NodesQuery::Node {
-                node_ip,
-                filters,
-                kind: NodeQueryType::Logs(msg_type),
-            },
-        ),
-        Err(errors) => {
-            debug!("Error parsing peer count params - {:?}", errors);
-            Box::new(fut_ok(
-                HttpResponse::BadRequest().json(json!(errors)).into(),
-            ))
+    let query = a_web::Query::<Filters>::from_query(&req.query_string());
+    let filters = match query {
+        Ok(f) => f.clone(),
+        Err(_) => {
+            warn!("Error deserializing Filters from querystring");
+            Filters::default()
         }
-    }
+    };
+    send_query(
+        NodesQuery::Node {
+            node_ip,
+            filters,
+            kind: NodeQueryType::Logs(msg_type),
+        },
+        db,
+    )
 }
 
-fn send_query(req: &HttpRequest<State>, query: NodesQuery) -> FutureResponse<HttpResponse> {
-    req.state()
-        .db
-        .send(query)
-        .from_err()
-        .and_then(move |res| match res {
-            Ok(r) => Ok(HttpResponse::Ok().json(r)),
-            Err(e) => {
-                error!("Could not complete stats query: {}", e);
-                Ok(HttpResponse::InternalServerError().json(json!("Error while processing query")))
-            }
-        })
-        .responder()
+fn send_query(
+    query: NodesQuery,
+    db: a_web::Data<Addr<DbExecutor>>,
+) -> impl Future<Item = HttpResponse, Error = AWError> {
+    db.send(query).from_err().and_then(move |res| match res {
+        Ok(r) => Ok(HttpResponse::Ok().json(r)),
+        Err(e) => {
+            error!("Could not complete stats query: {}", e);
+            Ok(HttpResponse::InternalServerError().json(json!("Error while processing query")))
+        }
+    })
 }
