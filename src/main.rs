@@ -21,7 +21,7 @@ use std::time::Duration;
 
 use crate::db::*;
 use actix::prelude::*;
-use actix_web::{middleware, server, App};
+use actix_web::{middleware, App, HttpServer};
 
 lazy_static! {
     /// Must be set
@@ -67,15 +67,14 @@ fn main() {
 
     let address = format!("0.0.0.0:{}", &*PORT);
     info!("Starting server on: {}", &address);
-    server::new(move || {
-        let mut app = App::with_state(web::State {
-            db: db_arbiter.clone(),
-        })
-        .middleware(middleware::Logger::default());
-        app = web::nodes::configure(app);
-        app = web::stats::configure(app);
-        app = web::root::configure(app);
-        app
+    HttpServer::new(move || {
+        App::new()
+            .data(db_arbiter.clone())
+            .wrap(middleware::NormalizePath)
+            .wrap(middleware::Logger::default())
+            .configure(web::nodes::configure)
+            .configure(web::stats::configure)
+            .configure(web::root::configure)
     })
     .backlog(*MAX_PENDING_CONNECTIONS)
     .bind(&address)
