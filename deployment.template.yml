@@ -17,6 +17,7 @@
 # LOG_EXPIRY_HOURS
 # MAX_PENDING_CONNECTIONS
 # DATABASE_POOL_SIZE
+# LOG_EXPIRY_HOURS
 #
 ---
 apiVersion: apps/v1
@@ -72,6 +73,8 @@ spec:
               value: "$MAX_PENDING_CONNECTIONS"
             - name: DATABASE_POOL_SIZE
               value: "$DATABASE_POOL_SIZE"
+            - name: LOG_EXPIRY_HOURS
+              value: "$LOG_EXPIRY_HOURS"
           readinessProbe:
             tcpSocket:
               port: $WS_PORT
