@@ -50,10 +50,10 @@ impl NodeSocket {
         ctx.run_interval(*HEARTBEAT_INTERVAL, move |act, ctx| {
             if Instant::now().duration_since(act.hb) > *CLIENT_TIMEOUT {
                 info!(
-                    "Websocket heartbeat failed for node: {}", // TODO re-add 'disconnecting' to msg
+                    "Websocket heartbeat failed for node: {} - DISCONNECTING",
                     ip
                 );
-                // ctx.stop(); TODO re-enable this once substrate is fixed and responding to PING
+                ctx.stop();
                 return;
             }
             ctx.ping("");
@@ -106,6 +106,7 @@ impl StreamHandler<ws::Message, ws::ProtocolError> for NodeSocket {
                 };
             }
             ws::Message::Close(_) => {
+                info!("Disconnecting from node: {}", ip);
                 ctx.stop();
             }
             ws::Message::Nop => (),
