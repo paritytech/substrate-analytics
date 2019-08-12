@@ -74,9 +74,10 @@ spec:
             - name: DATABASE_POOL_SIZE
               value: "$DATABASE_POOL_SIZE"
             - name: LOG_EXPIRY_HOURS
-              value: "$LOG_EXPIRY_HOURS"
+              value: "$SAVE_LOG_EXPIRY_HOURS"
             - name: RUST_LOG
-              value: "$RUST_LOG"
+              value: "$SAVE_RUST_LOG"
+
           readinessProbe:
             tcpSocket:
               port: $WS_PORT

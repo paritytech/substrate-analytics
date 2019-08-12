@@ -5,12 +5,11 @@ services:
     ports:
       - "8080:8080"
     environment:
-      - RUST_LOG=info
       - DATABASE_URL
       - PORT=8080
       - HEARTBEAT_INTERVAL
       - CLIENT_TIMEOUT
       - PURGE_FREQUENCY
-      - LOG_EXPIRY_HOURS=72
+      - DB_LOG_EXPIRY_HOURS=72
       - MAX_PENDING_CONNECTIONS
       - DATABASE_POOL_SIZE
