@@ -122,12 +122,14 @@ build-publish-docker-release:
     # this is the runner that is used to deploy it
     - kubernetes-parity-build
   before_script:
+    - kubectl version
     - test "${DEPLOY_TAG}" || DEPLOY_TAG="$CI_COMMIT_SHORT_SHA"
   script:
     - echo "Substrate-save version = ${DEPLOY_TAG}"
     - export SUBSTRATE_SAVE_DOCKER_IMAGE="parity/substrate-save:${DEPLOY_TAG}"
     # or use helm to render the template
-    - cat ./deployment.template.yml | envsubst | kubectl apply -n "$KUBE_NAMESPACE" -f -
+    - cat ./deployment.template.yml | envsubst | tee deployment.yaml
+    - kubectl apply -n "$KUBE_NAMESPACE" -f ./deployment.yaml
     - echo "# substrate-save namespace ${KUBE_NAMESPACE}"
     - kubectl -n ${KUBE_NAMESPACE} get all
     - echo "# wait for the rollout to complete"
