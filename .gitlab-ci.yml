@@ -130,6 +130,7 @@ build-publish-docker-release:
     # or use helm to render the template
     - cat ./deployment.template.yml | envsubst | tee deployment.yaml
     - kubectl apply -n "$KUBE_NAMESPACE" -f ./deployment.yaml
+    - rm -f ./deployment.yaml
     - echo "# substrate-save namespace ${KUBE_NAMESPACE}"
     - kubectl -n ${KUBE_NAMESPACE} get all
     - echo "# wait for the rollout to complete"
