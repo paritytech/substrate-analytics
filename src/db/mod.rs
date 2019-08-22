@@ -7,12 +7,14 @@ pub mod stats;
 use actix::prelude::*;
 use diesel;
 use diesel::pg::PgConnection;
+use diesel::prelude::*;
 use diesel::r2d2::{ConnectionManager, Pool, PoolError};
+use diesel::result::QueryResult;
 use diesel::RunQueryDsl;
 use logs::LogBatch;
 use std::time::{Duration, Instant};
 
-use self::models::NewSubstrateLog;
+use self::models::{NewPeerConnection, NewSubstrateLog, PeerConnection};
 use crate::{DATABASE_POOL_SIZE, DATABASE_URL};
 
 pub struct DbExecutor {
@@ -56,6 +58,61 @@ impl DbExecutor {
                 Ok(n) => trace!("Inserted {} log records into database", n),
             }
         });
+    }
+}
+
+impl Message for NewPeerConnection {
+    type Result = Result<PeerConnection, String>;
+}
+
+impl Handler<NewPeerConnection> for DbExecutor {
+    type Result = Result<PeerConnection, String>;
+
+    fn handle(&mut self, msg: NewPeerConnection, _: &mut Self::Context) -> Self::Result {
+        use crate::schema::peer_connections;
+        #[allow(unused_imports)]
+        use crate::schema::peer_connections::dsl::*;
+        let pc: Result<Result<PeerConnection, _>, _> = self.with_connection(|conn| {
+            let result: QueryResult<PeerConnection> = diesel::insert_into(peer_connections::table)
+                .values(&msg)
+                .get_result(conn);
+            result
+        });
+        if let Ok(pcr) = pc {
+            if let Ok(p) = pcr {
+                return Ok(p);
+            }
+        };
+        Err(format!(
+            "Error inserting PeerConnection, for ip: {}",
+            msg.ip_addr
+        ))
+    }
+}
+
+impl Message for PeerConnection {
+    type Result = Result<(), String>;
+}
+
+impl Handler<PeerConnection> for DbExecutor {
+    type Result = Result<(), String>;
+
+    fn handle(&mut self, msg: PeerConnection, _: &mut Self::Context) -> Self::Result {
+        //use crate::schema::peer_connections;
+        #[allow(unused_imports)]
+        use crate::schema::peer_connections::dsl::*;
+        let msg_id = msg.id;
+        let result = self.with_connection(|conn| {
+            diesel::update(peer_connections.filter(id.eq(msg.id)))
+                .set((peer_id.eq(msg.peer_id), ip_addr.eq(msg.ip_addr)))
+                .execute(conn)
+        });
+        if let Ok(ir) = result {
+            if let Ok(_) = ir {
+                return Ok(());
+            }
+        };
+        Err(format!("Error updating PeerConnection, id: {}", msg_id))
     }
 }
 
