@@ -11,11 +11,11 @@ use futures::Future;
 pub fn configure(cfg: &mut a_web::ServiceConfig) {
     cfg.service(
         a_web::scope("/nodes")
-            .route("/{node_ip}/peer_counts", a_web::get().to_async(peer_counts))
-            .route("/{node_ip}/logs/{msg_type}", a_web::get().to_async(logs))
-            .route("/{node_ip}/logs", a_web::get().to_async(all_logs))
-            .route("/{node_ip}/log_stats", a_web::get().to_async(log_stats))
-            .route("/{node_ip}/log_stats", a_web::get().to_async(log_stats))
+            .route("/{peer_id}/peer_counts", a_web::get().to_async(peer_counts))
+            .route("/{peer_id}/logs/{msg_type}", a_web::get().to_async(logs))
+            .route("/{peer_id}/logs", a_web::get().to_async(all_logs))
+            .route("/{peer_id}/log_stats", a_web::get().to_async(log_stats))
+            .route("/{peer_id}/log_stats", a_web::get().to_async(log_stats))
             .route("", a_web::get().to_async(all_nodes)),
     );
 }
@@ -32,7 +32,7 @@ fn log_stats(
 ) -> impl Future<Item = HttpResponse, Error = AWError> {
     let node_ip = req
         .match_info()
-        .get("node_ip")
+        .get("peer_id")
         .expect("node_ip should be available because the route matched")
         .to_string();
     let filters = match a_web::Query::<Filters>::from_query(&req.query_string()) {
@@ -58,7 +58,7 @@ fn peer_counts(
 ) -> impl Future<Item = HttpResponse, Error = AWError> {
     let node_ip = req
         .match_info()
-        .get("node_ip")
+        .get("peer_id")
         .expect("node_ip should be available because the route matched")
         .to_string();
     let filters = match a_web::Query::<Filters>::from_query(&req.query_string()) {
@@ -84,7 +84,7 @@ fn all_logs(
 ) -> impl Future<Item = HttpResponse, Error = AWError> {
     let node_ip = req
         .match_info()
-        .get("node_ip")
+        .get("peer_id")
         .expect("node_ip should be available because the route matched")
         .to_string();
     let filters = match a_web::Query::<Filters>::from_query(&req.query_string()) {
@@ -110,7 +110,7 @@ fn logs(
 ) -> impl Future<Item = HttpResponse, Error = AWError> {
     let node_ip = req
         .match_info()
-        .get("node_ip")
+        .get("peer_id")
         .expect("node_ip should be available because the route matched")
         .to_string();
     let msg_type = req

@@ -131,7 +131,7 @@ pub struct LogStats {
 }
 
 impl DbExecutor {
-    fn get_log_stats(&self, node_ip: String) -> Result<Value, Error> {
+    fn get_log_stats(&self, peer_id: String) -> Result<Value, Error> {
         match self.with_connection(|conn| {
             let query = sql_query(
                 "SELECT COUNT(log_type) as qty, log_type \
@@ -139,10 +139,10 @@ impl DbExecutor {
                  SELECT logs->>'msg' AS log_type \
                  FROM substrate_logs sl \
                  LEFT JOIN peer_connections pc ON sl.peer_connection_id = pc.id \
-                 WHERE ip_addr LIKE $1) t \
+                 WHERE peer_id = $1) t \
                  GROUP BY t.log_type",
             )
-            .bind::<Text, _>(format!("{}%", node_ip));
+            .bind::<Text, _>(format!("{}", peer_id));
             debug!(
                 "get_log_stats query: {}",
                 diesel::debug_query::<diesel::pg::Pg, _>(&query)
@@ -156,7 +156,7 @@ impl DbExecutor {
         }
     }
 
-    fn get_peer_counts(&self, node_ip: String, filters: Filters) -> Result<Value, Error> {
+    fn get_peer_counts(&self, peer_id: String, filters: Filters) -> Result<Value, Error> {
         match self.with_connection(|conn| {
             let query = sql_query(
                 "SELECT ip_addr, peer_id, pc.id as connection_id, \
@@ -166,14 +166,14 @@ impl DbExecutor {
                  FROM substrate_logs sl \
                  LEFT JOIN peer_connections pc ON sl.peer_connection_id = pc.id \
                  WHERE logs->>'msg' = 'system.interval' \
-                 AND ip_addr LIKE $1 \
+                 AND peer_id = $1 \
                  AND sl.created_at > $2 \
                  AND sl.created_at < $3 \
                  GROUP BY pc.id, peer_id, ip_addr, sl.created_at, logs \
                  ORDER BY pc.id, ts ASC \
                  LIMIT $4",
             )
-            .bind::<Text, _>(format!("{}%", node_ip))
+            .bind::<Text, _>(format!("{}", peer_id))
             .bind::<Timestamp, _>(
                 filters
                     .start_time
@@ -213,7 +213,7 @@ impl DbExecutor {
         }
     }
 
-    fn get_all_logs(&self, node_ip: String, filters: Filters) -> Result<Value, Error> {
+    fn get_all_logs(&self, peer_id: String, filters: Filters) -> Result<Value, Error> {
         match self.with_connection(|conn| {
             let query = sql_query(
                 "SELECT sl.id, \
@@ -225,13 +225,13 @@ impl DbExecutor {
                  peer_connection_id \
                  FROM substrate_logs sl \
                  LEFT JOIN peer_connections pc ON sl.peer_connection_id = pc.id \
-                 WHERE ip_addr LIKE $1 \
+                 WHERE peer_id = $1 \
                  AND sl.created_at > $2 \
                  AND sl.created_at < $3 \
                  ORDER BY ts DESC \
                  LIMIT $4",
             )
-            .bind::<Text, _>(format!("{}%", node_ip))
+            .bind::<Text, _>(format!("{}", peer_id))
             .bind::<Timestamp, _>(
                 filters
                     .start_time
@@ -258,7 +258,7 @@ impl DbExecutor {
 
     fn get_logs(
         &self,
-        node_ip: String,
+        peer_id: String,
         msg_type: String,
         filters: Filters,
     ) -> Result<Value, Error> {
@@ -273,14 +273,14 @@ impl DbExecutor {
                  peer_connection_id \
                  FROM substrate_logs sl \
                  LEFT JOIN peer_connections pc ON sl.peer_connection_id = pc.id \
-                 WHERE ip_addr LIKE $1 \
+                 WHERE peer_id = $1 \
                  AND sl.created_at > $2 \
                  AND sl.created_at < $3 \
                  AND logs->>'msg' = $4
                  ORDER BY ts DESC \
                  LIMIT $5",
             )
-            .bind::<Text, _>(format!("{}%", node_ip))
+            .bind::<Text, _>(format!("{}", peer_id))
             .bind::<Timestamp, _>(
                 filters
                     .start_time
