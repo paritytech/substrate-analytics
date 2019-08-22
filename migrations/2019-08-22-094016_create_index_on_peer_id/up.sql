@@ -1,0 +1,1 @@
+CREATE INDEX peer_connections_peer_id_idx ON peer_connections (peer_id);

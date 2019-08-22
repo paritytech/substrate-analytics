@@ -21,11 +21,11 @@ appropriate (to be determined) database tables.
 JSON endpoints for convenience:
 - **/stats/db** - stats for db showing table / index sizes on disk
 - **/nodes** - list of logged nodes
-- **/nodes/{node ip address}/peer_counts** - peer count history for the 
-given node ip address (will also match beginning of ip address, eg: w/wo port)
-- **/nodes/{node ip address}/log_stats** - shows the quantity of each type of log message received
-- **/nodes/{node ip address}/logs** - recent log messages, unprocessed
-- **/nodes/{node ip address}/logs/{msg type}** - recent log messages, filtered by message type: `msg`
+- **/nodes/{peer_id}/peer_counts** - peer count history (for the 
+given peer_id)
+- **/nodes/{peer_id}/log_stats** - shows the quantity of each type of log message received
+- **/nodes/{peer_id}/logs** - recent log messages, unprocessed
+- **/nodes/{peer_id}/logs/{msg type}** - recent log messages, filtered by message type: `msg`
 
 `peer_counts` and `logs` routes take the following optional parameters (with sensible defaults if not specified):
 - `start_time` in the format: `2019-01-01T00:00:00`
@@ -47,7 +47,7 @@ Optionally specify the following environment variables:
 - `HEARTBEAT_INTERVAL` (default: 5)
 - `CLIENT_TIMEOUT` (default: 10)
 - `PURGE_FREQUENCY` (default: 600)
-- `LOG_EXPIRY_HOURS`  (default: 168)
+- `LOG_EXPIRY_HOURS`  (default: u32::MAX)
 - `MAX_PENDING_CONNECTIONS` (default: 8192)
 - `DATABASE_POOL_SIZE` (default: 10)
 

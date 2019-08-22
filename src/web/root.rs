@@ -1,11 +1,13 @@
 use std::time::Instant;
 
-use crate::db::{models::NewSubstrateLog, DbExecutor};
+use crate::db::{
+    models::{NewPeerConnection, NewSubstrateLog, PeerConnection},
+    DbExecutor,
+};
 use crate::{CLIENT_TIMEOUT, HEARTBEAT_INTERVAL};
 
 use actix::prelude::*;
-//use actix_http::body::Body;
-use actix_web::{web as a_web, Error, HttpRequest, HttpResponse};
+use actix_web::{error, web as a_web, Error, HttpRequest, HttpResponse};
 use actix_web_actors::ws;
 use serde_json::Value;
 
@@ -27,22 +29,54 @@ fn ws_index(
         .unwrap_or("Unable to decode remote IP")
         .to_string();
     info!("Establishing ws connection to node: {}", ip);
-    ws::start(NodeSocket::new(ip, db), &r, stream)
+    match NodeSocket::new(ip.clone(), db) {
+        Ok(ns) => {
+            debug!(
+                "Created PeerConnection record, id: {}, for ip: {}",
+                ns.peer_connection.id, ip
+            );
+            ws::start(ns, &r, stream)
+        }
+        Err(e) => {
+            error!(
+                "Unable to save PeerConnection, aborting WS handshake for ip: {}",
+                ip
+            );
+            Err(error::ErrorInternalServerError(e))
+        }
+    }
 }
 
 struct NodeSocket {
     hb: Instant,
     ip: String,
     db: a_web::Data<Addr<DbExecutor>>,
+    peer_connection: PeerConnection,
 }
 
 impl NodeSocket {
-    fn new(ip: String, db: a_web::Data<Addr<DbExecutor>>) -> Self {
-        Self {
+    fn new(ip: String, db: a_web::Data<Addr<DbExecutor>>) -> Result<Self, String> {
+        Ok(Self {
+            peer_connection: Self::create_peer_connection(&db, &ip)?,
             ip,
             db,
             hb: Instant::now(),
-        }
+        })
+    }
+
+    fn create_peer_connection(
+        db: &a_web::Data<Addr<DbExecutor>>,
+        ip: &str,
+    ) -> Result<PeerConnection, String> {
+        db.send(NewPeerConnection {
+            ip_addr: String::from(ip), //
+            peer_id: None,
+        })
+        .wait()
+        .unwrap_or_else(|e| {
+            error!("Failed to send NewPeerConnection to DB actor - {:?}", e);
+            Err("Failed to send".to_string())
+        })
     }
 
     fn hb(&self, ctx: &mut <Self as Actor>::Context) {
@@ -112,12 +146,28 @@ impl StreamHandler<ws::Message, ws::ProtocolError> for NodeSocket {
             ws::Message::Nop => (),
         }
         if let Some(logs) = logs {
+            if self.peer_connection.peer_id.is_none() {
+                debug!("Searching for peerId for ip address: {}", &ip);
+                if let Some(peer_id) = logs["network_state"]["peerId"].as_str() {
+                    debug!("Found peerId: {}, for ip address: {}", &peer_id, &ip);
+                    self.peer_connection.peer_id = Some(peer_id.to_string());
+                    match self.db.send(self.peer_connection.clone()).wait() {
+                        Ok(Ok(())) => debug!(
+                            "Saved new peer connection record (ID: {:?}) for peer_id: {}",
+                            self.peer_connection.id, peer_id
+                        ),
+                        _ => error!(
+                            "Failed to send updated PeerConnection to DB actor for peer_connection_id: {}",
+                            self.peer_connection.id),
+                    }
+                }
+            }
             self.db
                 .try_send(NewSubstrateLog {
-                    node_ip: self.ip.clone(),
+                    peer_connection_id: self.peer_connection.id, //
                     logs,
                 })
-                .unwrap_or_else(|e| error!("Failed to send log to DB actor - {:?}", e));
+                .unwrap_or_else(|e| error!("Failed to send NewSubstrateLog to DB actor - {:?}", e));
         }
     }
 }
