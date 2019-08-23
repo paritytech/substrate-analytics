@@ -56,28 +56,11 @@ spec:
           #     sleep 600
           ports:
           - containerPort: $WS_PORT
-          env:
-            - name: PORT
-              value: "$WS_PORT"
-            - name: DATABASE_URL
-              value: "$SUBSTRATE_SAVE_DB_URL"
-            - name: HEARTBEAT_INTERVAL
-              value: "$HEARTBEAT_INTERVAL"
-            - name: CLIENT_TIMEOUT
-              value: "$CLIENT_TIMEOUT"
-            - name: PURGE_FREQUENCY
-              value: "$PURGE_FREQUENCY"
-            - name: LOG_EXPIRY_HOURS
-              value: "$LOG_EXPIRY_HOURS"
-            - name: MAX_PENDING_CONNECTIONS
-              value: "$MAX_PENDING_CONNECTIONS"
-            - name: DATABASE_POOL_SIZE
-              value: "$DATABASE_POOL_SIZE"
-            - name: LOG_EXPIRY_HOURS
-              value: "$SAVE_LOG_EXPIRY_HOURS"
-            - name: RUST_LOG
-              value: "$SAVE_RUST_LOG"
-
+          envFrom:
+            - configMapRef:
+                name: substrate-save
+            - secretKeyRef:
+                name: substrate-save
           readinessProbe:
             tcpSocket:
               port: $WS_PORT
@@ -88,6 +71,31 @@ spec:
               port: $WS_PORT
             initialDelaySeconds: 15
             periodSeconds: 20
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: substrate-save
+  namespace: $NAMESPACE
+data:
+  PORT: "$WS_PORT"
+  HEARTBEAT_INTERVAL: "$HEARTBEAT_INTERVAL"
+  CLIENT_TIMEOUT: "$CLIENT_TIMEOUT"
+  PURGE_FREQUENCY: "$PURGE_FREQUENCY"
+  LOG_EXPIRY_HOURS: "$LOG_EXPIRY_HOURS"
+  MAX_PENDING_CONNECTIONS: "$MAX_PENDING_CONNECTIONS"
+  DATABASE_POOL_SIZE: "$DATABASE_POOL_SIZE"
+  LOG_EXPIRY_HOURS: "$SAVE_LOG_EXPIRY_HOURS"
+  RUST_LOG: "$SAVE_RUST_LOG"
+---
+apiVersion: v1
+kind: Secret
+type: Opaque
+metadata:
+  name: substrate-save
+  namespace: $NAMESPACE
+data:
+  DATABASE_URL: "$SUBSTRATE_SAVE_DB_URL_B64"
 ---
 apiVersion: v1
 kind: Service
