@@ -101,6 +101,8 @@ build-publish-docker-release:
     - docker push $CONTAINER_IMAGE:latest
   after_script:
     - docker logout
+  only:
+    - tags
 
 
 
@@ -118,6 +120,7 @@ build-publish-docker-release:
     WS_PORT:                       1024
     SAVE_LOG_EXPIRY_HOURS:         241
     SAVE_RUST_LOG:                 debug
+    DEPLOY_TAG:                    latest
   tags:
     # this is the runner that is used to deploy it
     - kubernetes-parity-build
@@ -141,8 +144,8 @@ build-publish-docker-release:
 
 .deploy-cibuild:                   &deploy-cibuild
   <<:                              *deploy
-  dependencies:
-    - build-publish-docker-release
+#   dependencies:
+#     - build-publish-docker-release
 
 .deploy-tag:                       &deploy-tag
   <<:                              *deploy
