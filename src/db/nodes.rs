@@ -55,7 +55,7 @@ pub struct Node {
     #[sql_type = "Text"]
     ip_addr: String,
     #[sql_type = "Text"]
-    peer_id: String,
+    peer_id: Option<String>,
 }
 
 #[derive(Serialize, Deserialize, Debug, QueryableByName)]
