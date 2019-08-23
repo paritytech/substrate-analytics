@@ -101,6 +101,9 @@ build-publish-docker-release:
     - docker push $CONTAINER_IMAGE:latest
   after_script:
     - docker logout
+  except:
+    variables:
+      - $DEPLOY_TAG
 
 
 
@@ -143,6 +146,9 @@ build-publish-docker-release:
   <<:                              *deploy
   dependencies:
     - build-publish-docker-release
+  except:
+    variables:
+      - $DEPLOY_TAG
 
 .deploy-tag:                       &deploy-tag
   <<:                              *deploy
