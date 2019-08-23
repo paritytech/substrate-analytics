@@ -119,4 +119,5 @@ spec:
   - 35.246.210.11/32 # substrate20-1
   - 35.198.110.45/32 # substrate20-2
   - 35.198.114.154/32 # substrate20-3
-
+  - 51.77.66.187/32 # kusama-bootnode-0
+  - 51.79.17.206/32 # kusama-bootnode-1
