@@ -62,8 +62,6 @@ spec:
           envFrom:
             - configMapRef:
                 name: substrate-save
-            - secretKeyRef:
-                name: substrate-save
           readinessProbe:
             tcpSocket:
               port: $WS_PORT
