@@ -23,6 +23,7 @@ fn ws_index(
     stream: a_web::Payload,
     db: a_web::Data<Addr<DbExecutor>>,
 ) -> Result<HttpResponse, Error> {
+    debug!("HttpRequest: {:?}", &r);
     let ip = r
         .connection_info()
         .remote()
