@@ -20,7 +20,7 @@ pub enum NodeQueryType {
 pub enum NodesQuery {
     AllNodes,
     Node {
-        node_ip: String,
+        peer_id: String,
         filters: Filters,
         kind: NodeQueryType,
     },
@@ -37,14 +37,14 @@ impl Handler<NodesQuery> for DbExecutor {
         match msg {
             NodesQuery::AllNodes => self.get_nodes(),
             NodesQuery::Node {
-                node_ip,
+                peer_id,
                 filters,
                 kind,
             } => match kind {
-                NodeQueryType::PeerInfo => self.get_peer_counts(node_ip, filters),
-                NodeQueryType::AllLogs => self.get_all_logs(node_ip, filters),
-                NodeQueryType::Logs(msg_type) => self.get_logs(node_ip, msg_type, filters),
-                NodeQueryType::LogStats => self.get_log_stats(node_ip),
+                NodeQueryType::PeerInfo => self.get_peer_counts(peer_id, filters),
+                NodeQueryType::AllLogs => self.get_all_logs(peer_id, filters),
+                NodeQueryType::Logs(msg_type) => self.get_logs(peer_id, msg_type, filters),
+                NodeQueryType::LogStats => self.get_log_stats(peer_id),
             },
         }
     }
@@ -54,7 +54,7 @@ impl Handler<NodesQuery> for DbExecutor {
 pub struct Node {
     #[sql_type = "Text"]
     ip_addr: String,
-    #[sql_type = "Text"]
+    #[sql_type = "Nullable<Text>"]
     peer_id: Option<String>,
 }
 
