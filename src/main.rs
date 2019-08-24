@@ -30,10 +30,10 @@ lazy_static! {
     pub static ref PORT: String = env::var("PORT").expect("Unable to get PORT from ENV");
     /// Optional
     pub static ref HEARTBEAT_INTERVAL: Duration = Duration::from_secs(
-        parse_env("HEARTBEAT_INTERVAL").unwrap_or(10)
+        parse_env("HEARTBEAT_INTERVAL").unwrap_or(5)
     );
     pub static ref CLIENT_TIMEOUT: Duration = Duration::from_secs(
-        parse_env("CLIENT_TIMEOUT").unwrap_or(60)
+        parse_env("CLIENT_TIMEOUT").unwrap_or(10)
     );
     pub static ref PURGE_FREQUENCY: Duration = Duration::from_secs(
         parse_env("PURGE_FREQUENCY").unwrap_or(600)
