@@ -52,8 +52,6 @@ impl Handler<NodesQuery> for DbExecutor {
 
 #[derive(Serialize, Deserialize, Debug, QueryableByName)]
 pub struct Node {
-    #[sql_type = "Text"]
-    ip_addr: String,
     #[sql_type = "Nullable<Text>"]
     peer_id: Option<String>,
 }

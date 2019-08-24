@@ -7,7 +7,7 @@ use futures::Future;
 
 lazy_static! {
     static ref VERSION_INFO: String = format!(
-        "{}\n{}\n{}",
+        "{}<br\\>{}<br\\>{}",
         env!("CARGO_PKG_NAME"),
         env!("CARGO_PKG_VERSION"),
         env!("CARGO_PKG_DESCRIPTION")
