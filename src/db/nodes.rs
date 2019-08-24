@@ -203,7 +203,7 @@ impl DbExecutor {
 
     fn get_nodes(&self) -> Result<Value, Error> {
         match self.with_connection(|conn| {
-            let query = "SELECT DISTINCT ON (peer_id, ip_addr) * FROM peer_connections";
+            let query = "SELECT DISTINCT peer_id FROM peer_connections";
             let result: QueryResult<Vec<Node>> = diesel::sql_query(query).get_results(conn);
             result
         }) {
