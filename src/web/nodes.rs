@@ -30,10 +30,10 @@ fn log_stats(
     req: HttpRequest,
     db: a_web::Data<Addr<DbExecutor>>,
 ) -> impl Future<Item = HttpResponse, Error = AWError> {
-    let node_ip = req
+    let peer_id = req
         .match_info()
         .get("peer_id")
-        .expect("node_ip should be available because the route matched")
+        .expect("peer_id should be available because the route matched")
         .to_string();
     let filters = match a_web::Query::<Filters>::from_query(&req.query_string()) {
         Ok(f) => f.clone(),
@@ -44,7 +44,7 @@ fn log_stats(
     };
     send_query(
         NodesQuery::Node {
-            node_ip,
+            peer_id,
             filters,
             kind: NodeQueryType::LogStats,
         },
@@ -56,10 +56,10 @@ fn peer_counts(
     req: HttpRequest,
     db: a_web::Data<Addr<DbExecutor>>,
 ) -> impl Future<Item = HttpResponse, Error = AWError> {
-    let node_ip = req
+    let peer_id = req
         .match_info()
         .get("peer_id")
-        .expect("node_ip should be available because the route matched")
+        .expect("peer_id should be available because the route matched")
         .to_string();
     let filters = match a_web::Query::<Filters>::from_query(&req.query_string()) {
         Ok(f) => f.clone(),
@@ -70,7 +70,7 @@ fn peer_counts(
     };
     send_query(
         NodesQuery::Node {
-            node_ip,
+            peer_id,
             filters,
             kind: NodeQueryType::PeerInfo,
         },
@@ -82,10 +82,10 @@ fn all_logs(
     req: HttpRequest,
     db: a_web::Data<Addr<DbExecutor>>,
 ) -> impl Future<Item = HttpResponse, Error = AWError> {
-    let node_ip = req
+    let peer_id = req
         .match_info()
         .get("peer_id")
-        .expect("node_ip should be available because the route matched")
+        .expect("peer_id should be available because the route matched")
         .to_string();
     let filters = match a_web::Query::<Filters>::from_query(&req.query_string()) {
         Ok(f) => f.clone(),
@@ -96,7 +96,7 @@ fn all_logs(
     };
     send_query(
         NodesQuery::Node {
-            node_ip,
+            peer_id,
             filters,
             kind: NodeQueryType::AllLogs,
         },
@@ -108,10 +108,10 @@ fn logs(
     req: HttpRequest,
     db: a_web::Data<Addr<DbExecutor>>,
 ) -> impl Future<Item = HttpResponse, Error = AWError> {
-    let node_ip = req
+    let peer_id = req
         .match_info()
         .get("peer_id")
-        .expect("node_ip should be available because the route matched")
+        .expect("peer_id should be available because the route matched")
         .to_string();
     let msg_type = req
         .match_info()
@@ -128,7 +128,7 @@ fn logs(
     };
     send_query(
         NodesQuery::Node {
-            node_ip,
+            peer_id,
             filters,
             kind: NodeQueryType::Logs(msg_type),
         },
@@ -143,7 +143,7 @@ fn send_query(
     db.send(query).from_err().and_then(move |res| match res {
         Ok(r) => Ok(HttpResponse::Ok().json(r)),
         Err(e) => {
-            error!("Could not complete stats query: {}", e);
+            error!("Could not complete query: {}", e);
             Ok(HttpResponse::InternalServerError().json(json!("Error while processing query")))
         }
     })

@@ -1,12 +1,24 @@
 use crate::db::{stats::Query, DbExecutor};
 use actix::prelude::*;
-use actix_web::{web as a_web, Error as AWError, HttpResponse};
+use actix_web::{
+    http::StatusCode, web as a_web, Error as AWError, HttpResponse, Result as AWResult,
+};
 use futures::Future;
+
+lazy_static! {
+    static ref VERSION_INFO: String = format!(
+        "{}\n{}\n{}",
+        env!("CARGO_PKG_NAME"),
+        env!("CARGO_PKG_VERSION"),
+        env!("CARGO_PKG_DESCRIPTION")
+    );
+}
 
 pub fn configure(cfg: &mut a_web::ServiceConfig) {
     cfg.service(
-        a_web::scope("stats")
-            .service(a_web::resource("/db").route(a_web::get().to_async(send_query))),
+        a_web::scope("/stats")
+            .route("/db", a_web::get().to_async(send_query))
+            .route("/version", a_web::get().to(version)),
     );
 }
 
@@ -22,4 +34,10 @@ fn send_query(
                 Ok(HttpResponse::InternalServerError().json(json!("Error while processing query")))
             }
         })
+}
+
+fn version() -> AWResult<HttpResponse> {
+    Ok(HttpResponse::build(StatusCode::OK)
+        .content_type("text/html; charset=utf-8")
+        .body(&*VERSION_INFO))
 }
