@@ -17,18 +17,35 @@ pub fn configure(cfg: &mut a_web::ServiceConfig) {
     );
 }
 
+fn debug_headers(req: &HttpRequest) {
+    let head = req.head();
+    let headers = head.headers();
+    debug!(
+        "PEER_ADDR: {:?}",
+        head.peer_addr.unwrap_or(std::net::SocketAddr::new(
+            std::net::IpAddr::V4(std::net::Ipv4Addr::new(1, 0, 0, 1)),
+            1
+        ))
+    );
+    for (k, v) in headers.iter() {
+        debug!("HEADER MAP: Key: {}", k);
+        debug!("HEADER MAP: Value: {:?}", v);
+    }
+}
+
 // Websocket handshake and start actor
 fn ws_index(
     r: HttpRequest,
     stream: a_web::Payload,
     db: a_web::Data<Addr<DbExecutor>>,
 ) -> Result<HttpResponse, Error> {
-    debug!("HttpRequest: {:?}", &r);
+    //    debug!("HttpRequest: {:?}", &r);
     let ip = r
         .connection_info()
         .remote()
         .unwrap_or("Unable to decode remote IP")
         .to_string();
+    debug_headers(&r);
     info!("Establishing ws connection to node: {}", ip);
     match NodeSocket::new(ip.clone(), db) {
         Ok(ns) => {
