@@ -23,6 +23,8 @@ use crate::db::*;
 use actix::prelude::*;
 use actix_web::{middleware, App, HttpServer};
 
+const HOURS_32_YEARS: u32 = 280320;
+
 lazy_static! {
     /// Must be set
     pub static ref DATABASE_URL: String =
@@ -38,7 +40,7 @@ lazy_static! {
     pub static ref PURGE_FREQUENCY: Duration = Duration::from_secs(
         parse_env("PURGE_FREQUENCY").unwrap_or(600)
     );
-    pub static ref LOG_EXPIRY_HOURS: u32 = parse_env("LOG_EXPIRY_HOURS").unwrap_or(core::u32::MAX);
+    pub static ref LOG_EXPIRY_HOURS: u32 = parse_env("LOG_EXPIRY_HOURS").unwrap_or(HOURS_32_YEARS);
     pub static ref MAX_PENDING_CONNECTIONS: i32 = parse_env("MAX_PENDING_CONNECTIONS").unwrap_or(8192);
     pub static ref DATABASE_POOL_SIZE: u32 = parse_env("DATABASE_POOL_SIZE").unwrap_or(10);
 }
