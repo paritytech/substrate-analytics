@@ -21,11 +21,9 @@ fn debug_headers(req: &HttpRequest) {
     let head = req.head();
     let headers = head.headers();
     debug!(
-        "PEER_ADDR: {:?}",
-        head.peer_addr.unwrap_or(std::net::SocketAddr::new(
-            std::net::IpAddr::V4(std::net::Ipv4Addr::new(1, 0, 0, 1)),
-            1
-        ))
+        "PEER_ADDR (could be proxy): {:?}",
+        head.peer_addr
+            .expect("Should always have access to peer_addr from request")
     );
     for (k, v) in headers.iter() {
         debug!("HEADER MAP: Key: {}", k);
@@ -70,6 +68,7 @@ struct NodeSocket {
     ip: String,
     db: a_web::Data<Addr<DbExecutor>>,
     peer_connection: PeerConnection,
+    msg_count: u64,
 }
 
 impl NodeSocket {
@@ -79,6 +78,7 @@ impl NodeSocket {
             ip,
             db,
             hb: Instant::now(),
+            msg_count: 0,
         })
     }
 
@@ -134,10 +134,14 @@ impl StreamHandler<ws::Message, ws::ProtocolError> for NodeSocket {
                 ctx.pong(&msg);
             }
             ws::Message::Pong(_) => {
-                debug!("PONG from: {}", ip);
+                debug!(
+                    "PONG from: {} - received {} Text/Binary messages on this connection",
+                    ip, self.msg_count
+                );
                 self.hb = Instant::now();
             }
             ws::Message::Text(text) => {
+                self.msg_count += 1;
                 trace!("TEXT from: {} - {}", ip, text);
                 logs = match serde_json::from_str(&text) {
                     Ok(a) => Some(a),
@@ -148,6 +152,7 @@ impl StreamHandler<ws::Message, ws::ProtocolError> for NodeSocket {
                 };
             }
             ws::Message::Binary(bin) => {
+                self.msg_count += 1;
                 trace!("BINARY from: {} - {:?}", ip, bin);
                 logs = match serde_json::from_slice(&bin[..]) {
                     Ok(a) => Some(a),
