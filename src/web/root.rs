@@ -1,3 +1,4 @@
+use std::fmt;
 use std::time::Instant;
 
 use crate::db::{
@@ -11,55 +12,21 @@ use actix_web::{error, web as a_web, Error, HttpRequest, HttpResponse};
 use actix_web_actors::ws;
 use serde_json::Value;
 
-pub fn configure(cfg: &mut a_web::ServiceConfig) {
-    cfg.service(
-        a_web::scope("/").service(a_web::resource("").route(a_web::get().to_async(ws_index))),
-    );
+#[derive(Default, Debug)]
+struct MessageCount {
+    ping: u64,
+    pong: u64,
+    text: u64,
+    binary: u64,
 }
 
-fn debug_headers(req: &HttpRequest) {
-    let head = req.head();
-    let headers = head.headers();
-    debug!(
-        "PEER_ADDR (could be proxy): {:?}",
-        head.peer_addr
-            .expect("Should always have access to peer_addr from request")
-    );
-    for (k, v) in headers.iter() {
-        debug!("HEADER MAP: Key: {}", k);
-        debug!("HEADER MAP: Value: {:?}", v);
-    }
-}
-
-// Websocket handshake and start actor
-fn ws_index(
-    r: HttpRequest,
-    stream: a_web::Payload,
-    db: a_web::Data<Addr<DbExecutor>>,
-) -> Result<HttpResponse, Error> {
-    //    debug!("HttpRequest: {:?}", &r);
-    let ip = r
-        .connection_info()
-        .remote()
-        .unwrap_or("Unable to decode remote IP")
-        .to_string();
-    debug_headers(&r);
-    info!("Establishing ws connection to node: {}", ip);
-    match NodeSocket::new(ip.clone(), db) {
-        Ok(ns) => {
-            debug!(
-                "Created PeerConnection record, id: {}, for ip: {}",
-                ns.peer_connection.id, ip
-            );
-            ws::start(ns, &r, stream)
-        }
-        Err(e) => {
-            error!(
-                "Unable to save PeerConnection, aborting WS handshake for ip: {}",
-                ip
-            );
-            Err(error::ErrorInternalServerError(e))
-        }
+impl fmt::Display for MessageCount {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(
+            f,
+            "ping: {}, pong: {}, text: {}, binary {}",
+            self.ping, self.pong, self.text, self.binary
+        )
     }
 }
 
@@ -68,7 +35,7 @@ struct NodeSocket {
     ip: String,
     db: a_web::Data<Addr<DbExecutor>>,
     peer_connection: PeerConnection,
-    msg_count: u64,
+    msg_count: MessageCount,
 }
 
 impl NodeSocket {
@@ -78,7 +45,7 @@ impl NodeSocket {
             ip,
             db,
             hb: Instant::now(),
-            msg_count: 0,
+            msg_count: MessageCount::default(),
         })
     }
 
@@ -101,10 +68,7 @@ impl NodeSocket {
         let ip = self.ip.clone();
         ctx.run_interval(*HEARTBEAT_INTERVAL, move |act, ctx| {
             if Instant::now().duration_since(act.hb) > *CLIENT_TIMEOUT {
-                info!(
-                    "Websocket heartbeat failed for node: {} - DISCONNECTING",
-                    ip
-                );
+                info!("Websocket heartbeat failed for: {} - DISCONNECTING", ip);
                 ctx.stop();
                 return;
             }
@@ -129,19 +93,18 @@ impl StreamHandler<ws::Message, ws::ProtocolError> for NodeSocket {
         let mut logs: Option<Value> = None;
         match msg {
             ws::Message::Ping(msg) => {
+                self.msg_count.ping += 1;
                 debug!("PING from: {}", ip);
                 self.hb = Instant::now();
                 ctx.pong(&msg);
             }
             ws::Message::Pong(_) => {
-                debug!(
-                    "PONG from: {} - received {} Text/Binary messages on this connection",
-                    ip, self.msg_count
-                );
+                self.msg_count.pong += 1;
+                debug!("PONG from: {} - message count: ({})", ip, self.msg_count);
                 self.hb = Instant::now();
             }
             ws::Message::Text(text) => {
-                self.msg_count += 1;
+                self.msg_count.text += 1;
                 trace!("TEXT from: {} - {}", ip, text);
                 logs = match serde_json::from_str(&text) {
                     Ok(a) => Some(a),
@@ -152,7 +115,7 @@ impl StreamHandler<ws::Message, ws::ProtocolError> for NodeSocket {
                 };
             }
             ws::Message::Binary(bin) => {
-                self.msg_count += 1;
+                self.msg_count.binary += 1;
                 trace!("BINARY from: {} - {:?}", ip, bin);
                 logs = match serde_json::from_slice(&bin[..]) {
                     Ok(a) => Some(a),
@@ -163,7 +126,10 @@ impl StreamHandler<ws::Message, ws::ProtocolError> for NodeSocket {
                 };
             }
             ws::Message::Close(_) => {
-                info!("Disconnecting from node: {}", ip);
+                info!(
+                    "Close received, disconnecting: {} - message count: ({})",
+                    ip, self.msg_count
+                );
                 ctx.stop();
             }
             ws::Message::Nop => (),
@@ -192,5 +158,56 @@ impl StreamHandler<ws::Message, ws::ProtocolError> for NodeSocket {
                 })
                 .unwrap_or_else(|e| error!("Failed to send NewSubstrateLog to DB actor - {:?}", e));
         }
+    }
+}
+
+pub fn configure(cfg: &mut a_web::ServiceConfig) {
+    cfg.service(
+        a_web::scope("/").service(a_web::resource("").route(a_web::get().to_async(ws_index))),
+    );
+}
+
+// Websocket handshake and start actor
+fn ws_index(
+    r: HttpRequest,
+    stream: a_web::Payload,
+    db: a_web::Data<Addr<DbExecutor>>,
+) -> Result<HttpResponse, Error> {
+    let ip = r
+        .connection_info()
+        .remote()
+        .unwrap_or("Unable to decode remote IP")
+        .to_string();
+    debug_headers(&r);
+    info!("Establishing ws connection to node: {}", ip);
+    match NodeSocket::new(ip.clone(), db) {
+        Ok(ns) => {
+            debug!(
+                "Created PeerConnection record, id: {}, for ip: {}",
+                ns.peer_connection.id, ip
+            );
+            ws::start(ns, &r, stream)
+        }
+        Err(e) => {
+            error!(
+                "Unable to save PeerConnection, aborting WS handshake for ip: {}",
+                ip
+            );
+            Err(error::ErrorInternalServerError(e))
+        }
+    }
+}
+
+fn debug_headers(req: &HttpRequest) {
+    let head = req.head();
+    let headers = head.headers();
+    debug!(
+        "PEER_ADDR (could be proxy): {:?}",
+        head.peer_addr
+            .expect("Should always have access to peer_addr from request")
+    );
+    for (k, v) in headers.iter() {
+        debug!("HEADER MAP: Key: {}", k);
+        debug!("HEADER MAP: Value: {:?}", v);
     }
 }
