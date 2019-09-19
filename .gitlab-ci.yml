@@ -119,7 +119,7 @@ build-publish-docker-release:
     NAMESPACE:                     "${KUBE_NAMESPACE}"
     REPLICAS:                      1
     WS_PORT:                       1024
-    SAVE_LOG_EXPIRY_HOURS:         241
+    SAVE_LOG_EXPIRY_HOURS:         240
     SAVE_RUST_LOG:                 debug
   tags:
     # this is the runner that is used to deploy it

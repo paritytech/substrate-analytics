@@ -55,7 +55,7 @@ impl DbExecutor {
                 .execute(conn)
             {
                 Err(e) => error!("Error inserting logs: {:?}", e),
-                Ok(n) => trace!("Inserted {} log records into database", n),
+                Ok(n) => trace!("Inserted {} substrate_logs", n),
             }
         });
     }

@@ -8,6 +8,7 @@ use crate::db::{
 use crate::{CLIENT_TIMEOUT, HEARTBEAT_INTERVAL};
 
 use actix::prelude::*;
+use actix_http::ws::Codec;
 use actix_web::{error, web as a_web, Error, HttpRequest, HttpResponse};
 use actix_web_actors::ws;
 use serde_json::Value;
@@ -105,7 +106,6 @@ impl StreamHandler<ws::Message, ws::ProtocolError> for NodeSocket {
             }
             ws::Message::Text(text) => {
                 self.msg_count.text += 1;
-                trace!("TEXT from: {} - {}", ip, text);
                 logs = match serde_json::from_str(&text) {
                     Ok(a) => Some(a),
                     Err(e) => {
@@ -116,7 +116,6 @@ impl StreamHandler<ws::Message, ws::ProtocolError> for NodeSocket {
             }
             ws::Message::Binary(bin) => {
                 self.msg_count.binary += 1;
-                trace!("BINARY from: {} - {:?}", ip, bin);
                 logs = match serde_json::from_slice(&bin[..]) {
                     Ok(a) => Some(a),
                     Err(e) => {
@@ -186,7 +185,12 @@ fn ws_index(
                 "Created PeerConnection record, id: {}, for ip: {}",
                 ns.peer_connection.id, ip
             );
-            ws::start(ns, &r, stream)
+            let mut res = ws::handshake(&r).map_err(|e| Error::from(()))?;
+            // Set Codec to accept payload size of 256 MiB because default 65KiB is not enough
+            let mut codec = Codec::new().max_size(268_435_456);
+            info!("Codec {:?}", codec);
+            let ws_context = ws::WebsocketContext::with_codec(ns, stream, codec);
+            Ok(res.streaming(ws_context))
         }
         Err(e) => {
             error!(
@@ -202,12 +206,12 @@ fn debug_headers(req: &HttpRequest) {
     let head = req.head();
     let headers = head.headers();
     debug!(
-        "PEER_ADDR (could be proxy): {:?}",
+        "HTTP peer_addr (could be proxy): {:?}",
         head.peer_addr
             .expect("Should always have access to peer_addr from request")
     );
     for (k, v) in headers.iter() {
-        debug!("HEADER MAP: Key: {}", k);
-        debug!("HEADER MAP: Value: {:?}", v);
+        trace!("HEADER MAP: Key: {}", k);
+        trace!("HEADER MAP: Value: {:?}", v);
     }
 }
