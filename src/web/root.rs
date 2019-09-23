@@ -1,17 +1,16 @@
-use std::fmt;
-use std::time::Instant;
-
+use super::metrics::Metrics;
 use crate::db::{
     models::{NewPeerConnection, NewSubstrateLog, PeerConnection},
     DbExecutor,
 };
-use crate::{CLIENT_TIMEOUT, HEARTBEAT_INTERVAL};
-
+use crate::{CLIENT_TIMEOUT, HEARTBEAT_INTERVAL, WS_MAX_PAYLOAD};
 use actix::prelude::*;
 use actix_http::ws::Codec;
 use actix_web::{error, web as a_web, Error, HttpRequest, HttpResponse};
 use actix_web_actors::ws;
 use serde_json::Value;
+use std::fmt;
+use std::time::Instant;
 
 #[derive(Default, Debug)]
 struct MessageCount {
@@ -35,16 +34,29 @@ struct NodeSocket {
     hb: Instant,
     ip: String,
     db: a_web::Data<Addr<DbExecutor>>,
+    metrics: a_web::Data<Metrics>,
     peer_connection: PeerConnection,
     msg_count: MessageCount,
 }
 
+impl Drop for NodeSocket {
+    fn drop(&mut self) {
+        self.metrics.inc_ws_dropped_count();
+        debug!("Dropped WS connection to ip: {}", self.ip);
+    }
+}
+
 impl NodeSocket {
-    fn new(ip: String, db: a_web::Data<Addr<DbExecutor>>) -> Result<Self, String> {
+    fn new(
+        ip: String,
+        db: a_web::Data<Addr<DbExecutor>>,
+        metrics: a_web::Data<Metrics>,
+    ) -> Result<Self, String> {
         Ok(Self {
             peer_connection: Self::create_peer_connection(&db, &ip)?,
             ip,
             db,
+            metrics,
             hb: Instant::now(),
             msg_count: MessageCount::default(),
         })
@@ -105,6 +117,8 @@ impl StreamHandler<ws::Message, ws::ProtocolError> for NodeSocket {
                 self.hb = Instant::now();
             }
             ws::Message::Text(text) => {
+                self.metrics
+                    .inc_ws_bytes_received(text.as_bytes().len() as u64);
                 self.msg_count.text += 1;
                 logs = match serde_json::from_str(&text) {
                     Ok(a) => Some(a),
@@ -115,6 +129,7 @@ impl StreamHandler<ws::Message, ws::ProtocolError> for NodeSocket {
                 };
             }
             ws::Message::Binary(bin) => {
+                self.metrics.inc_ws_bytes_received(bin.len() as u64);
                 self.msg_count.binary += 1;
                 logs = match serde_json::from_slice(&bin[..]) {
                     Ok(a) => Some(a),
@@ -134,6 +149,7 @@ impl StreamHandler<ws::Message, ws::ProtocolError> for NodeSocket {
             ws::Message::Nop => (),
         }
         if let Some(logs) = logs {
+            self.metrics.inc_ws_message_count();
             if self.peer_connection.peer_id.is_none() {
                 debug!("Searching for peerId for ip address: {}", &ip);
                 if let Some(peer_id) = logs["network_state"]["peerId"].as_str() {
@@ -171,6 +187,7 @@ fn ws_index(
     r: HttpRequest,
     stream: a_web::Payload,
     db: a_web::Data<Addr<DbExecutor>>,
+    metrics: a_web::Data<Metrics>,
 ) -> Result<HttpResponse, Error> {
     let ip = r
         .connection_info()
@@ -179,16 +196,15 @@ fn ws_index(
         .to_string();
     debug_headers(&r);
     info!("Establishing ws connection to node: {}", ip);
-    match NodeSocket::new(ip.clone(), db) {
+    match NodeSocket::new(ip.clone(), db, metrics.clone()) {
         Ok(ns) => {
+            metrics.inc_ws_connected_count();
             debug!(
                 "Created PeerConnection record, id: {}, for ip: {}",
                 ns.peer_connection.id, ip
             );
-            let mut res = ws::handshake(&r).map_err(|e| Error::from(()))?;
-            // Set Codec to accept payload size of 256 MiB because default 65KiB is not enough
-            let mut codec = Codec::new().max_size(268_435_456);
-            info!("Codec {:?}", codec);
+            let mut res = ws::handshake(&r)?;
+            let codec = Codec::new().max_size(*WS_MAX_PAYLOAD);
             let ws_context = ws::WebsocketContext::with_codec(ns, stream, codec);
             Ok(res.streaming(ws_context))
         }

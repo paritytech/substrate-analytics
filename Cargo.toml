@@ -13,19 +13,15 @@ actix-http = "*"
 diesel = { version = "1.4.2", features = ["postgres", "chrono", "network-address", "r2d2", "numeric", "serde_json"] }
 bigdecimal = "0.0.11"
 chrono = { version = "0.4", features = ["serde"] }
-
 dotenv = "0.13.0"
-
 env_logger = "*"
 failure = "0.1.1"
-log = "*"
 futures = "0.1"
-
+json = "*"
 lazy_static = "1.1.0"
-
+log = "*"
 num_cpus = "1.0"
-
+parking_lot = "0.9"
 serde_json = "1"
 serde = "1"
 serde_derive = "1"
-json = "*"

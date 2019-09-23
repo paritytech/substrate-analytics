@@ -121,6 +121,7 @@ build-publish-docker-release:
     WS_PORT:                       1024
     SAVE_LOG_EXPIRY_HOURS:         240
     SAVE_RUST_LOG:                 debug
+    WS_MAX_PAYLOAD:                524_288 # Needs to be more than 65_536 (64KiB) which is actix-web default
   tags:
     # this is the runner that is used to deploy it
     - kubernetes-parity-build

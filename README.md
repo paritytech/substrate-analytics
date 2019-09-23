@@ -1,5 +1,7 @@
 ## Substrate Save
 
+\* to connect to substrate-save you must whitelist your IP address in `deployment.template.yml`
+
 Comprises a websocket server accepting incoming telemetry from multiple 
 [Substrate](https://github.com/paritytech/substrate) nodes. Substrate-save is designed to be resilient (to network errors), 
 performant and easily horizontally scalable by deploying more servers.
