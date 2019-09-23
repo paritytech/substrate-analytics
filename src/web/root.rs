@@ -5,7 +5,7 @@ use crate::db::{
     models::{NewPeerConnection, NewSubstrateLog, PeerConnection},
     DbExecutor,
 };
-use crate::{CLIENT_TIMEOUT, HEARTBEAT_INTERVAL};
+use crate::{CLIENT_TIMEOUT, HEARTBEAT_INTERVAL, WS_MAX_PAYLOAD};
 
 use actix::prelude::*;
 use actix_http::ws::Codec;
@@ -185,10 +185,8 @@ fn ws_index(
                 "Created PeerConnection record, id: {}, for ip: {}",
                 ns.peer_connection.id, ip
             );
-            let mut res = ws::handshake(&r).map_err(|e| Error::from(()))?;
-            // Set Codec to accept payload size of 256 MiB because default 65KiB is not enough
-            let mut codec = Codec::new().max_size(268_435_456);
-            info!("Codec {:?}", codec);
+            let mut res = ws::handshake(&r)?;
+            let codec = Codec::new().max_size(*WS_MAX_PAYLOAD);
             let ws_context = ws::WebsocketContext::with_codec(ns, stream, codec);
             Ok(res.streaming(ws_context))
         }

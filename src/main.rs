@@ -43,6 +43,9 @@ lazy_static! {
     pub static ref LOG_EXPIRY_HOURS: u32 = parse_env("LOG_EXPIRY_HOURS").unwrap_or(HOURS_32_YEARS);
     pub static ref MAX_PENDING_CONNECTIONS: i32 = parse_env("MAX_PENDING_CONNECTIONS").unwrap_or(8192);
     pub static ref DATABASE_POOL_SIZE: u32 = parse_env("DATABASE_POOL_SIZE").unwrap_or(10);
+
+    // Set Codec to accept payload size of 256 MiB because default 65KiB is not enough
+    pub static ref WS_MAX_PAYLOAD: usize = parse_env("WS_MAX_PAYLOAD").unwrap_or(268_435_456);
 }
 
 fn main() {
@@ -90,14 +93,16 @@ fn main() {
 // Private
 
 fn log_statics() {
+    info!("Configuration options:");
     info!("HEARTBEAT_INTERVAL = {:?}", *HEARTBEAT_INTERVAL);
     info!("CLIENT_TIMEOUT = {:?}", *CLIENT_TIMEOUT);
     info!("PURGE_FREQUENCY = {:?}", *PURGE_FREQUENCY);
     info!("LOG_EXPIRY_HOURS = {:?}", *LOG_EXPIRY_HOURS);
     info!("MAX_PENDING_CONNECTIONS = {:?}", *MAX_PENDING_CONNECTIONS);
-    info!("DATABASE_URL = *HIDDEN*");
     info!("DATABASE_POOL_SIZE = {:?}", *DATABASE_POOL_SIZE);
     info!("PORT = {:?}", *PORT);
+    info!("WS_MAX_PAYLOAD = {:?} bytes", *WS_MAX_PAYLOAD);
+    info!("DATABASE_URL has been set");
 }
 
 fn parse_env<T>(var: &'static str) -> Result<T, ()>
