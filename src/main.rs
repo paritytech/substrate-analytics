@@ -71,14 +71,12 @@ fn main() {
         recipient: db_arbiter.clone().recipient(),
     };
     db_housekeeper.start();
-    let req_counter = Arc::new(AtomicUsize::new(0));
     let metrics = web::metrics::Metrics::default();
     let address = format!("0.0.0.0:{}", &*PORT);
     info!("Starting server on: {}", &address);
     HttpServer::new(move || {
         App::new()
             .data(db_arbiter.clone())
-            .data(req_counter.clone())
             .data(metrics.clone())
             .wrap(middleware::NormalizePath)
             .wrap(middleware::Logger::default())
