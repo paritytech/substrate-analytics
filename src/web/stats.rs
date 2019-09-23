@@ -1,3 +1,4 @@
+use super::metrics::Metrics;
 use crate::db::{stats::Query, DbExecutor};
 use actix::prelude::*;
 use actix_web::{
@@ -24,7 +25,9 @@ pub fn configure(cfg: &mut a_web::ServiceConfig) {
 
 fn send_query(
     db: a_web::Data<Addr<DbExecutor>>,
+    metrics: a_web::Data<Metrics>,
 ) -> impl Future<Item = HttpResponse, Error = AWError> {
+    metrics.inc_req_count();
     db.send(Query::Db)
         .from_err()
         .and_then(move |res| match res {
@@ -36,7 +39,8 @@ fn send_query(
         })
 }
 
-fn version() -> AWResult<HttpResponse> {
+fn version(metrics: a_web::Data<Metrics>) -> AWResult<HttpResponse> {
+    metrics.inc_req_count();
     Ok(HttpResponse::build(StatusCode::OK)
         .content_type("text/html; charset=utf-8")
         .body(&*VERSION_INFO))

@@ -17,6 +17,8 @@ mod web;
 
 use dotenv::dotenv;
 use std::env;
+use std::sync::atomic::AtomicUsize;
+use std::sync::Arc;
 use std::time::Duration;
 
 use crate::db::*;
@@ -69,16 +71,20 @@ fn main() {
         recipient: db_arbiter.clone().recipient(),
     };
     db_housekeeper.start();
-
+    let req_counter = Arc::new(AtomicUsize::new(0));
+    let metrics = web::metrics::Metrics::default();
     let address = format!("0.0.0.0:{}", &*PORT);
     info!("Starting server on: {}", &address);
     HttpServer::new(move || {
         App::new()
             .data(db_arbiter.clone())
+            .data(req_counter.clone())
+            .data(metrics.clone())
             .wrap(middleware::NormalizePath)
             .wrap(middleware::Logger::default())
             .configure(web::nodes::configure)
             .configure(web::stats::configure)
+            .configure(web::metrics::configure)
             .configure(web::root::configure)
     })
     .backlog(*MAX_PENDING_CONNECTIONS)

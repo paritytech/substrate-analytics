@@ -1,9 +1,9 @@
+use super::metrics::Metrics;
+use crate::db::*;
 use crate::db::{
     filters::Filters,
     nodes::{NodeQueryType, NodesQuery},
 };
-
-use crate::db::*;
 use actix::prelude::*;
 use actix_web::{web as a_web, Error as AWError, HttpRequest, HttpResponse};
 use futures::Future;
@@ -22,14 +22,18 @@ pub fn configure(cfg: &mut a_web::ServiceConfig) {
 
 fn all_nodes(
     db: a_web::Data<Addr<DbExecutor>>,
+    metrics: a_web::Data<Metrics>,
 ) -> impl Future<Item = HttpResponse, Error = AWError> {
+    metrics.inc_req_count();
     send_query(NodesQuery::AllNodes, db)
 }
 
 fn log_stats(
     req: HttpRequest,
     db: a_web::Data<Addr<DbExecutor>>,
+    metrics: a_web::Data<Metrics>,
 ) -> impl Future<Item = HttpResponse, Error = AWError> {
+    metrics.inc_req_count();
     let peer_id = req
         .match_info()
         .get("peer_id")
@@ -55,7 +59,9 @@ fn log_stats(
 fn peer_counts(
     req: HttpRequest,
     db: a_web::Data<Addr<DbExecutor>>,
+    metrics: a_web::Data<Metrics>,
 ) -> impl Future<Item = HttpResponse, Error = AWError> {
+    metrics.inc_req_count();
     let peer_id = req
         .match_info()
         .get("peer_id")
@@ -81,7 +87,9 @@ fn peer_counts(
 fn all_logs(
     req: HttpRequest,
     db: a_web::Data<Addr<DbExecutor>>,
+    metrics: a_web::Data<Metrics>,
 ) -> impl Future<Item = HttpResponse, Error = AWError> {
+    metrics.inc_req_count();
     let peer_id = req
         .match_info()
         .get("peer_id")
@@ -107,7 +115,9 @@ fn all_logs(
 fn logs(
     req: HttpRequest,
     db: a_web::Data<Addr<DbExecutor>>,
+    metrics: a_web::Data<Metrics>,
 ) -> impl Future<Item = HttpResponse, Error = AWError> {
+    metrics.inc_req_count();
     let peer_id = req
         .match_info()
         .get("peer_id")
