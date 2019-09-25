@@ -17,8 +17,6 @@ mod web;
 
 use dotenv::dotenv;
 use std::env;
-use std::sync::atomic::AtomicUsize;
-use std::sync::Arc;
 use std::time::Duration;
 
 use crate::db::*;
