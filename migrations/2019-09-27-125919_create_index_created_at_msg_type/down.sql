@@ -1,0 +1,1 @@
+DROP INDEX substrate_logs_created_at_msg_idx;

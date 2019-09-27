@@ -8,6 +8,7 @@ use actix::prelude::*;
 use actix_http::ws::Codec;
 use actix_web::{error, web as a_web, Error, HttpRequest, HttpResponse};
 use actix_web_actors::ws;
+use chrono::DateTime;
 use serde_json::Value;
 use std::fmt;
 use std::time::Instant;
@@ -166,12 +167,23 @@ impl StreamHandler<ws::Message, ws::ProtocolError> for NodeSocket {
                     }
                 }
             }
-            self.db
-                .try_send(NewSubstrateLog {
-                    peer_connection_id: self.peer_connection.id, //
-                    logs,
-                })
-                .unwrap_or_else(|e| error!("Failed to send NewSubstrateLog to DB actor - {:?}", e));
+            if let Some(ts) = logs["ts"].as_str() {
+                if let Ok(ts_utc) = DateTime::parse_from_rfc3339(ts) {
+                    self.db
+                        .try_send(NewSubstrateLog {
+                            peer_connection_id: self.peer_connection.id,
+                            created_at: ts_utc.naive_utc(),
+                            logs,
+                        })
+                        .unwrap_or_else(|e| {
+                            error!("Failed to send NewSubstrateLog to DB actor - {:?}", e)
+                        });
+                } else {
+                    warn!("Unable to parse_from_rfc3339 for timestamp: {:?}", ts);
+                }
+            } else {
+                warn!("Unable to find timestamp in logs: {:?}", logs);
+            }
         }
     }
 }

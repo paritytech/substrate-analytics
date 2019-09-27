@@ -1,0 +1,1 @@
+CREATE INDEX substrate_logs_created_at_msg_idx ON substrate_logs USING BTREE (created_at, (logs->>'msg'));

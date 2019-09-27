@@ -15,7 +15,6 @@ pub fn configure(cfg: &mut a_web::ServiceConfig) {
             .route("/{peer_id}/logs/{msg_type}", a_web::get().to_async(logs))
             .route("/{peer_id}/logs", a_web::get().to_async(all_logs))
             .route("/{peer_id}/log_stats", a_web::get().to_async(log_stats))
-            .route("/{peer_id}/log_stats", a_web::get().to_async(log_stats))
             .route("", a_web::get().to_async(all_nodes)),
     );
 }

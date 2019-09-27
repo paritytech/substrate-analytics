@@ -34,27 +34,27 @@ impl Metrics {
 
 const WS_MESSAGE_COUNT_TEMPLATE: &'static str =
     "# HELP save_ws_message_count Number of binary and text messages received - (does not include PING/PONG messages)\n\
-     # TYPE save_ws_message_count gauge\n\
+     # TYPE save_ws_message_count counter\n\
      save_ws_message_count ";
 
 const WS_CONNECTED_COUNT_TEMPLATE: &'static str =
     "# HELP save_ws_connected_count Total number of WS connections made since launch.\n\
-     # TYPE save_ws_connected_count gauge\n\
+     # TYPE save_ws_connected_count counter\n\
      save_ws_connected_count ";
 
 const WS_DROPPED_COUNT_TEMPLATE: &'static str =
     "# HELP save_ws_dropped_count Total number of WS connections dropped since launch.\n\
-     # TYPE save_ws_dropped_count gauge\n\
+     # TYPE save_ws_dropped_count counter\n\
      save_ws_dropped_count ";
 
 const WS_BYTES_RECEIVED_TEMPLATE: &'static str =
     "# HELP save_ws_bytes_received Total bytes received in binary and text WS messages.\n\
-     # TYPE save_ws_bytes_received gauge\n\
+     # TYPE save_ws_bytes_received counter\n\
      save_ws_bytes_received ";
 
 const REQ_COUNT_TEMPLATE: &'static str =
     "# HELP save_requests Number of get requests to non WS routes, also excluding metrics route.\n\
-     # TYPE save_requests gauge\n\
+     # TYPE save_requests counter\n\
      save_requests ";
 
 impl fmt::Display for Metrics {

@@ -16,6 +16,7 @@ pub struct SubstrateLog {
 pub struct NewSubstrateLog {
     pub logs: Value,
     pub peer_connection_id: i32,
+    pub created_at: NaiveDateTime,
 }
 
 #[derive(Queryable, QueryableByName, Identifiable, Serialize, PartialEq, Clone, Debug)]
