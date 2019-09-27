@@ -42,10 +42,12 @@ lazy_static! {
     );
     pub static ref LOG_EXPIRY_HOURS: u32 = parse_env("LOG_EXPIRY_HOURS").unwrap_or(HOURS_32_YEARS);
     pub static ref MAX_PENDING_CONNECTIONS: i32 = parse_env("MAX_PENDING_CONNECTIONS").unwrap_or(8192);
-    pub static ref DATABASE_POOL_SIZE: u32 = parse_env("DATABASE_POOL_SIZE").unwrap_or(10);
 
     // Set Codec to accept payload size of 256 MiB because default 65KiB is not enough
     pub static ref WS_MAX_PAYLOAD: usize = parse_env("WS_MAX_PAYLOAD").unwrap_or(268_435_456);
+
+    pub static ref NUM_THREADS: usize = num_cpus::get() * 3;
+    pub static ref DATABASE_POOL_SIZE: u32 = parse_env("DATABASE_POOL_SIZE").unwrap_or(*NUM_THREADS as u32);
 }
 
 fn main() {
@@ -56,9 +58,8 @@ fn main() {
     let sys = actix::System::new("substrate-save");
     info!("Creating database pool");
     let pool = create_pool();
-    let num_threads = num_cpus::get() * 3;
-    info!("Starting DbArbiter with {} threads", num_threads);
-    let db_arbiter = SyncArbiter::start(num_threads, move || db::DbExecutor::new(pool.clone()));
+    info!("Starting DbArbiter with {} threads", *NUM_THREADS);
+    let db_arbiter = SyncArbiter::start(*NUM_THREADS, move || db::DbExecutor::new(pool.clone()));
     info!("DbExecutor started");
 
     let db_housekeeper = util::PeriodicAction {
