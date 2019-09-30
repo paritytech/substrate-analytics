@@ -1,0 +1,1 @@
+ALTER TABLE peer_connections DROP COLUMN audit;

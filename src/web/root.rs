@@ -36,6 +36,7 @@ struct NodeSocket {
     ip: String,
     db: a_web::Data<Addr<DbExecutor>>,
     metrics: a_web::Data<Metrics>,
+    // Indicate if the logs should be saved to a different table that is not automatically purged
     peer_connection: PeerConnection,
     msg_count: MessageCount,
 }
@@ -52,9 +53,10 @@ impl NodeSocket {
         ip: String,
         db: a_web::Data<Addr<DbExecutor>>,
         metrics: a_web::Data<Metrics>,
+        audit: bool,
     ) -> Result<Self, String> {
         Ok(Self {
-            peer_connection: Self::create_peer_connection(&db, &ip)?,
+            peer_connection: Self::create_peer_connection(&db, &ip, audit)?,
             ip,
             db,
             metrics,
@@ -66,10 +68,12 @@ impl NodeSocket {
     fn create_peer_connection(
         db: &a_web::Data<Addr<DbExecutor>>,
         ip: &str,
+        audit: bool,
     ) -> Result<PeerConnection, String> {
         db.send(NewPeerConnection {
             ip_addr: String::from(ip), //
             peer_id: None,
+            audit,
         })
         .wait()
         .unwrap_or_else(|e| {
@@ -190,7 +194,9 @@ impl StreamHandler<ws::Message, ws::ProtocolError> for NodeSocket {
 
 pub fn configure(cfg: &mut a_web::ServiceConfig) {
     cfg.service(
-        a_web::scope("/").service(a_web::resource("").route(a_web::get().to_async(ws_index))),
+        a_web::scope("/")
+            .route("audit", a_web::get().to_async(ws_index_permanent))
+            .route("", a_web::get().to_async(ws_index)),
     );
 }
 
@@ -201,6 +207,26 @@ fn ws_index(
     db: a_web::Data<Addr<DbExecutor>>,
     metrics: a_web::Data<Metrics>,
 ) -> Result<HttpResponse, Error> {
+    establish_connection(r, stream, db, metrics, false)
+}
+
+// Websocket handshake and start actor
+fn ws_index_permanent(
+    r: HttpRequest,
+    stream: a_web::Payload,
+    db: a_web::Data<Addr<DbExecutor>>,
+    metrics: a_web::Data<Metrics>,
+) -> Result<HttpResponse, Error> {
+    establish_connection(r, stream, db, metrics, true)
+}
+
+fn establish_connection(
+    r: HttpRequest,
+    stream: a_web::Payload,
+    db: a_web::Data<Addr<DbExecutor>>,
+    metrics: a_web::Data<Metrics>,
+    audit: bool,
+) -> Result<HttpResponse, Error> {
     let ip = r
         .connection_info()
         .remote()
@@ -208,7 +234,7 @@ fn ws_index(
         .to_string();
     debug_headers(&r);
     info!("Establishing ws connection to node: {}", ip);
-    match NodeSocket::new(ip.clone(), db, metrics.clone()) {
+    match NodeSocket::new(ip.clone(), db, metrics.clone(), audit) {
         Ok(ns) => {
             metrics.inc_ws_connected_count();
             debug!(

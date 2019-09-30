@@ -18,16 +18,25 @@ appropriate (to be determined) database tables.
 
 #### Routes:
 
-- **/** - is just for incoming telemetry (ws) - set with this option in substrate cli: `--telemetry-url 'ws://127.0.0.1:8080 5'`
+- **`/`** 
+  - incoming telemetry (with expiry as set by `LOG_EXPIRY_HOURS`) (ws) - set with this option in substrate cli: `--telemetry-url 'ws://127.0.0.1:8080 5'`
+- **`/audit`** 
+  - incoming telemetry with no expiry (ws) - set with this option in substrate cli: `--telemetry-url 'ws://127.0.0.1:8080 5'`
 
 JSON endpoints for convenience:
-- **/stats/db** - stats for db showing table / index sizes on disk
-- **/nodes** - list of logged nodes
-- **/nodes/{peer_id}/peer_counts** - peer count history (for the 
+- **`/stats/db`** 
+  - stats for db showing table / index sizes on disk
+- **`/nodes`** 
+  - list of logged nodes
+- **`/nodes/{peer_id}/peer_counts`** 
+  - peer count history (for the 
 given peer_id)
-- **/nodes/{peer_id}/log_stats** - shows the quantity of each type of log message received
-- **/nodes/{peer_id}/logs** - recent log messages, unprocessed
-- **/nodes/{peer_id}/logs/{msg type}** - recent log messages, filtered by message type: `msg`
+- **`/nodes/{peer_id}/log_stats`** 
+  - shows the quantity of each type of log message received
+- **`/nodes/{peer_id}/logs`** 
+  - recent log messages, unprocessed
+- **`/nodes/{peer_id}/logs/{msg type}`** 
+  - recent log messages, filtered by message type: `msg`
 
 `peer_counts` and `logs` routes take the following optional parameters (with sensible defaults if not specified):
 - `start_time` in the format: `2019-01-01T00:00:00`

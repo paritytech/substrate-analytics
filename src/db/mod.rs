@@ -180,7 +180,11 @@ impl Handler<PurgeLogs> for DbExecutor {
     fn handle(&mut self, msg: PurgeLogs, _: &mut Self::Context) -> Self::Result {
         let _ = self.with_connection(|conn| {
             let query = format!(
-                "DELETE FROM substrate_logs WHERE created_at < now() - {} * interval '1 hour'",
+                "DELETE FROM substrate_logs \
+                 USING peer_connections \
+                 WHERE peer_connections.id = peer_connection_id \
+                 AND audit = false \
+                 AND substrate_logs.created_at < now() - {} * interval '1 hour'",
                 msg.hours_valid
             );
             info!("Cleaning up database");
