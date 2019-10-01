@@ -18,16 +18,25 @@ appropriate (to be determined) database tables.
 
 #### Routes:
 
-- **/** - is just for incoming telemetry (ws) - set with this option in substrate cli: `--telemetry-url 'ws://127.0.0.1:8080 5'`
+- **`/`** 
+  - incoming telemetry (with expiry as set by `LOG_EXPIRY_HOURS`) (ws) - set with this option in substrate cli: `--telemetry-url 'ws://127.0.0.1:8080 5'`
+- **`/audit`** 
+  - incoming telemetry with no expiry (ws) - set with this option in substrate cli: `--telemetry-url 'ws://127.0.0.1:8080 5'`
 
 JSON endpoints for convenience:
-- **/stats/db** - stats for db showing table / index sizes on disk
-- **/nodes** - list of logged nodes
-- **/nodes/{peer_id}/peer_counts** - peer count history (for the 
+- **`/stats/db`** 
+  - stats for db showing table / index sizes on disk
+- **`/nodes`** 
+  - list of logged nodes
+- **`/nodes/{peer_id}/peer_counts`** 
+  - peer count history (for the 
 given peer_id)
-- **/nodes/{peer_id}/log_stats** - shows the quantity of each type of log message received
-- **/nodes/{peer_id}/logs** - recent log messages, unprocessed
-- **/nodes/{peer_id}/logs/{msg type}** - recent log messages, filtered by message type: `msg`
+- **`/nodes/{peer_id}/log_stats`** 
+  - shows the quantity of each type of log message received
+- **`/nodes/{peer_id}/logs`** 
+  - recent log messages, unprocessed
+- **`/nodes/{peer_id}/logs/{msg type}`** 
+  - recent log messages, filtered by message type: `msg`
 
 `peer_counts` and `logs` routes take the following optional parameters (with sensible defaults if not specified):
 - `start_time` in the format: `2019-01-01T00:00:00`
@@ -49,20 +58,19 @@ Optionally specify the following environment variables:
 - `HEARTBEAT_INTERVAL` (default: 5)
 - `CLIENT_TIMEOUT` (default: 10)
 - `PURGE_FREQUENCY` (default: 600)
-- `LOG_EXPIRY_HOURS`  (default: u32::MAX)
+- `LOG_EXPIRY_HOURS`  (default: 280320)
 - `MAX_PENDING_CONNECTIONS` (default: 8192)
+- `WS_MAX_PAYLOAD` (default: 524_288)
+- `NUM_THREADS` (default: CPUs * 3)
 - `DATABASE_POOL_SIZE` (default: 10)
+- `DB_BATCH_SIZE` (default: 1024) - batch size for insert
+- `DB_SAVE_LATENCY_MS` (default: 100) - max latency (ms) for insert
 
 To allow logging you must set:
 
 - `RUST_LOG` to some log level
 
-Limitations:
-
 Log messages are batched together in each actor before `INSERT` 
 \- up to 128 messages or 100ms, whichever is reached sooner. 
-However, an insert is only triggered on receipt of a log message, 
-(if the check on the above conditions is true). 
-Batches are local to each actor in the system.
 
 ---

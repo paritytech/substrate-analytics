@@ -4,6 +4,7 @@ table! {
         ip_addr -> Varchar,
         peer_id -> Nullable<Varchar>,
         created_at -> Timestamp,
+        audit -> Bool,
     }
 }
 

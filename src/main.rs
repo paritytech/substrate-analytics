@@ -19,6 +19,7 @@ use dotenv::dotenv;
 use std::env;
 use std::time::Duration;
 
+use crate::db::models::NewSubstrateLog;
 use crate::db::*;
 use actix::prelude::*;
 use actix_web::{middleware, App, HttpServer};
@@ -43,11 +44,63 @@ lazy_static! {
     pub static ref LOG_EXPIRY_HOURS: u32 = parse_env("LOG_EXPIRY_HOURS").unwrap_or(HOURS_32_YEARS);
     pub static ref MAX_PENDING_CONNECTIONS: i32 = parse_env("MAX_PENDING_CONNECTIONS").unwrap_or(8192);
 
-    // Set Codec to accept payload size of 256 MiB because default 65KiB is not enough
-    pub static ref WS_MAX_PAYLOAD: usize = parse_env("WS_MAX_PAYLOAD").unwrap_or(268_435_456);
+    // Set Codec to accept payload size of 512 MiB because default 65KiB is not enough
+    pub static ref WS_MAX_PAYLOAD: usize = parse_env("WS_MAX_PAYLOAD").unwrap_or(524_288);
 
     pub static ref NUM_THREADS: usize = num_cpus::get() * 3;
     pub static ref DATABASE_POOL_SIZE: u32 = parse_env("DATABASE_POOL_SIZE").unwrap_or(*NUM_THREADS as u32);
+    pub static ref DB_BATCH_SIZE: usize = parse_env("DB_BATCH_SIZE").unwrap_or(1024);
+    pub static ref DB_SAVE_LATENCY_MS: Duration = Duration::from_millis(parse_env("DB_SAVE_LATENCY_MS").unwrap_or(100));
+}
+
+struct LogBuffer {
+    logs: Vec<NewSubstrateLog>,
+    db_arbiter: Recipient<LogBatch>,
+}
+
+impl Actor for LogBuffer {
+    type Context = Context<Self>;
+
+    fn started(&mut self, ctx: &mut Self::Context) {
+        ctx.set_mailbox_capacity(10_000);
+    }
+}
+
+impl Message for NewSubstrateLog {
+    type Result = Result<(), &'static str>;
+}
+
+impl Handler<NewSubstrateLog> for LogBuffer {
+    type Result = Result<(), &'static str>;
+
+    fn handle(&mut self, msg: NewSubstrateLog, _: &mut Self::Context) -> Self::Result {
+        self.logs.push(msg);
+        Ok(())
+    }
+}
+
+#[derive(Clone)]
+struct SaveLogs;
+
+impl Message for SaveLogs {
+    type Result = Result<(), &'static str>;
+}
+
+impl Handler<SaveLogs> for LogBuffer {
+    type Result = Result<(), &'static str>;
+
+    fn handle(&mut self, _msg: SaveLogs, _: &mut Self::Context) -> Self::Result {
+        while !self.logs.is_empty() {
+            let lb = LogBatch(
+                self.logs
+                    .split_off(self.logs.len().saturating_sub(*DB_BATCH_SIZE)),
+            );
+            self.db_arbiter
+                .try_send(lb)
+                .unwrap_or_else(|e| error!("Failed to send NewSubstrateLog to DB actor - {:?}", e));
+        }
+        Ok(())
+    }
 }
 
 fn main() {
@@ -61,15 +114,28 @@ fn main() {
     info!("Starting DbArbiter with {} threads", *NUM_THREADS);
     let db_arbiter = SyncArbiter::start(*NUM_THREADS, move || db::DbExecutor::new(pool.clone()));
     info!("DbExecutor started");
+    let log_buffer = LogBuffer {
+        logs: Vec::new(),
+        db_arbiter: db_arbiter.clone().recipient(),
+    }
+    .start();
 
-    let db_housekeeper = util::PeriodicAction {
-        frequency: *PURGE_FREQUENCY,
+    util::PeriodicAction {
+        interval: *PURGE_FREQUENCY,
         message: PurgeLogs {
             hours_valid: *LOG_EXPIRY_HOURS,
         },
         recipient: db_arbiter.clone().recipient(),
-    };
-    db_housekeeper.start();
+    }
+    .start();
+
+    util::PeriodicAction {
+        interval: *DB_SAVE_LATENCY_MS,
+        message: SaveLogs,
+        recipient: log_buffer.clone().recipient(),
+    }
+    .start();
+
     let metrics = web::metrics::Metrics::default();
     let address = format!("0.0.0.0:{}", &*PORT);
     info!("Starting server on: {}", &address);
@@ -77,6 +143,7 @@ fn main() {
         App::new()
             .data(db_arbiter.clone())
             .data(metrics.clone())
+            .data(log_buffer.clone())
             .wrap(middleware::NormalizePath)
             .wrap(middleware::Logger::default())
             .configure(web::nodes::configure)
@@ -103,6 +170,8 @@ fn log_statics() {
     info!("LOG_EXPIRY_HOURS = {:?}", *LOG_EXPIRY_HOURS);
     info!("MAX_PENDING_CONNECTIONS = {:?}", *MAX_PENDING_CONNECTIONS);
     info!("DATABASE_POOL_SIZE = {:?}", *DATABASE_POOL_SIZE);
+    info!("DB_BATCH_SIZE = {:?}", *DB_BATCH_SIZE);
+    info!("DB_SAVE_LATENCY_MS = {:?}", *DB_SAVE_LATENCY_MS);
     info!("PORT = {:?}", *PORT);
     info!("WS_MAX_PAYLOAD = {:?} bytes", *WS_MAX_PAYLOAD);
     info!("DATABASE_URL has been set");
