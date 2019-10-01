@@ -58,20 +58,19 @@ Optionally specify the following environment variables:
 - `HEARTBEAT_INTERVAL` (default: 5)
 - `CLIENT_TIMEOUT` (default: 10)
 - `PURGE_FREQUENCY` (default: 600)
-- `LOG_EXPIRY_HOURS`  (default: u32::MAX)
+- `LOG_EXPIRY_HOURS`  (default: 280320)
 - `MAX_PENDING_CONNECTIONS` (default: 8192)
+- `WS_MAX_PAYLOAD` (default: 524_288)
+- `NUM_THREADS` (default: CPUs * 3)
 - `DATABASE_POOL_SIZE` (default: 10)
+- `DB_BATCH_SIZE` (default: 1024) - batch size for insert
+- `DB_SAVE_LATENCY_MS` (default: 100) - max latency (ms) for insert
 
 To allow logging you must set:
 
 - `RUST_LOG` to some log level
 
-Limitations:
-
 Log messages are batched together in each actor before `INSERT` 
 \- up to 128 messages or 100ms, whichever is reached sooner. 
-However, an insert is only triggered on receipt of a log message, 
-(if the check on the above conditions is true). 
-Batches are local to each actor in the system.
 
 ---

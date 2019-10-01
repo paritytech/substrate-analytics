@@ -3,7 +3,7 @@ use crate::db::{
     models::{NewPeerConnection, NewSubstrateLog, PeerConnection},
     DbExecutor,
 };
-use crate::{CLIENT_TIMEOUT, HEARTBEAT_INTERVAL, WS_MAX_PAYLOAD};
+use crate::{LogBuffer, CLIENT_TIMEOUT, HEARTBEAT_INTERVAL, WS_MAX_PAYLOAD};
 use actix::prelude::*;
 use actix_http::ws::Codec;
 use actix_web::{error, web as a_web, Error, HttpRequest, HttpResponse};
@@ -35,6 +35,7 @@ struct NodeSocket {
     hb: Instant,
     ip: String,
     db: a_web::Data<Addr<DbExecutor>>,
+    log_buffer: a_web::Data<Addr<LogBuffer>>,
     metrics: a_web::Data<Metrics>,
     // Indicate if the logs should be saved to a different table that is not automatically purged
     peer_connection: PeerConnection,
@@ -52,6 +53,7 @@ impl NodeSocket {
     fn new(
         ip: String,
         db: a_web::Data<Addr<DbExecutor>>,
+        log_buffer: a_web::Data<Addr<LogBuffer>>,
         metrics: a_web::Data<Metrics>,
         audit: bool,
     ) -> Result<Self, String> {
@@ -59,6 +61,7 @@ impl NodeSocket {
             peer_connection: Self::create_peer_connection(&db, &ip, audit)?,
             ip,
             db,
+            log_buffer,
             metrics,
             hb: Instant::now(),
             msg_count: MessageCount::default(),
@@ -173,7 +176,7 @@ impl StreamHandler<ws::Message, ws::ProtocolError> for NodeSocket {
             }
             if let Some(ts) = logs["ts"].as_str() {
                 if let Ok(ts_utc) = DateTime::parse_from_rfc3339(ts) {
-                    self.db
+                    self.log_buffer
                         .try_send(NewSubstrateLog {
                             peer_connection_id: self.peer_connection.id,
                             created_at: ts_utc.naive_utc(),
@@ -205,9 +208,10 @@ fn ws_index(
     r: HttpRequest,
     stream: a_web::Payload,
     db: a_web::Data<Addr<DbExecutor>>,
+    log_buffer: a_web::Data<Addr<LogBuffer>>,
     metrics: a_web::Data<Metrics>,
 ) -> Result<HttpResponse, Error> {
-    establish_connection(r, stream, db, metrics, false)
+    establish_connection(r, stream, db, log_buffer, metrics, false)
 }
 
 // Websocket handshake and start actor
@@ -215,15 +219,17 @@ fn ws_index_permanent(
     r: HttpRequest,
     stream: a_web::Payload,
     db: a_web::Data<Addr<DbExecutor>>,
+    log_buffer: a_web::Data<Addr<LogBuffer>>,
     metrics: a_web::Data<Metrics>,
 ) -> Result<HttpResponse, Error> {
-    establish_connection(r, stream, db, metrics, true)
+    establish_connection(r, stream, db, log_buffer, metrics, true)
 }
 
 fn establish_connection(
     r: HttpRequest,
     stream: a_web::Payload,
     db: a_web::Data<Addr<DbExecutor>>,
+    log_buffer: a_web::Data<Addr<LogBuffer>>,
     metrics: a_web::Data<Metrics>,
     audit: bool,
 ) -> Result<HttpResponse, Error> {
@@ -234,7 +240,7 @@ fn establish_connection(
         .to_string();
     debug_headers(&r);
     info!("Establishing ws connection to node: {}", ip);
-    match NodeSocket::new(ip.clone(), db, metrics.clone(), audit) {
+    match NodeSocket::new(ip.clone(), db, log_buffer, metrics.clone(), audit) {
         Ok(ns) => {
             metrics.inc_ws_connected_count();
             debug!(

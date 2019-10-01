@@ -1,5 +1,4 @@
 pub mod filters;
-pub mod logs;
 pub mod models;
 pub mod nodes;
 pub mod stats;
@@ -11,15 +10,12 @@ use diesel::prelude::*;
 use diesel::r2d2::{ConnectionManager, Pool, PoolError};
 use diesel::result::QueryResult;
 use diesel::RunQueryDsl;
-use logs::LogBatch;
-use std::time::{Duration, Instant};
 
 use self::models::{NewPeerConnection, NewSubstrateLog, PeerConnection};
 use crate::{DATABASE_POOL_SIZE, DATABASE_URL};
 
 pub struct DbExecutor {
     pool: Pool<ConnectionManager<PgConnection>>,
-    log_batch: LogBatch,
 }
 
 impl Actor for DbExecutor {
@@ -41,23 +37,7 @@ impl DbExecutor {
 
     // Creates a new DbExecutor
     pub fn new(pool: Pool<ConnectionManager<PgConnection>>) -> Self {
-        let log_batch = LogBatch::new();
-        DbExecutor { pool, log_batch }
-    }
-
-    fn save_logs(&self, new_logs: &[NewSubstrateLog]) {
-        use crate::schema::substrate_logs;
-        #[allow(unused_imports)]
-        use crate::schema::substrate_logs::dsl::*;
-        let _ = self.with_connection(|conn| {
-            match diesel::insert_into(substrate_logs::table)
-                .values(new_logs)
-                .execute(conn)
-            {
-                Err(e) => error!("Error inserting logs: {:?}", e),
-                Ok(n) => trace!("Inserted {} substrate_logs", n),
-            }
-        });
+        DbExecutor { pool }
     }
 }
 
@@ -116,49 +96,26 @@ impl Handler<PeerConnection> for DbExecutor {
     }
 }
 
-impl Message for NewSubstrateLog {
+pub struct LogBatch(pub Vec<NewSubstrateLog>);
+
+impl Message for LogBatch {
     type Result = Result<(), &'static str>;
 }
 
-impl Handler<NewSubstrateLog> for DbExecutor {
+impl Handler<LogBatch> for DbExecutor {
     type Result = Result<(), &'static str>;
 
-    fn handle(&mut self, msg: NewSubstrateLog, _: &mut Self::Context) -> Self::Result {
-        self.log_batch.rows.push(msg);
-        if self.log_batch.last_saved + Duration::from_millis(100) < Instant::now()
-            || self.log_batch.rows.len() > 127
-        {
-            let rows_to_save = std::mem::replace(&mut self.log_batch.rows, Vec::with_capacity(128));
-            self.save_logs(&rows_to_save);
-            self.log_batch.last_saved = Instant::now();
-        }
-        Ok(())
-    }
-}
-
-pub struct CreateSubstrateLog {
-    pub log: NewSubstrateLog,
-}
-
-impl Message for CreateSubstrateLog {
-    type Result = Result<(), &'static str>;
-}
-
-impl Handler<CreateSubstrateLog> for DbExecutor {
-    type Result = Result<(), &'static str>;
-
-    fn handle(&mut self, msg: CreateSubstrateLog, _: &mut Self::Context) -> Self::Result {
+    fn handle(&mut self, msg: LogBatch, _: &mut Self::Context) -> Self::Result {
+        use crate::schema::substrate_logs;
+        #[allow(unused_imports)]
+        use crate::schema::substrate_logs::dsl::*;
         let _ = self.with_connection(|conn| {
-            use crate::schema::substrate_logs;
-            #[allow(unused_imports)]
-            use crate::schema::substrate_logs::dsl::*;
-            #[allow(unused_imports)]
-            use diesel::prelude::*;
-            let result = diesel::insert_into(substrate_logs::table)
-                .values(msg.log)
-                .execute(conn);
-            if let Err(e) = result {
-                error!("Error saving log: {:?}", e);
+            match diesel::insert_into(substrate_logs::table)
+                .values(msg.0)
+                .execute(conn)
+            {
+                Err(e) => error!("Error inserting logs: {:?}", e),
+                Ok(n) => debug!("Inserted {} substrate_logs", n),
             }
         });
         Ok(())

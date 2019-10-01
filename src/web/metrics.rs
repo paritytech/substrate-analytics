@@ -16,19 +16,19 @@ pub struct Metrics {
 
 impl Metrics {
     pub fn inc_ws_message_count(&self) {
-        self.ws_message_count.fetch_add(1, Ordering::SeqCst);
+        self.ws_message_count.fetch_add(1, Ordering::Relaxed);
     }
     pub fn inc_ws_connected_count(&self) {
-        self.ws_connected_count.fetch_add(1, Ordering::SeqCst);
+        self.ws_connected_count.fetch_add(1, Ordering::Relaxed);
     }
     pub fn inc_ws_dropped_count(&self) {
-        self.ws_dropped_count.fetch_add(1, Ordering::SeqCst);
+        self.ws_dropped_count.fetch_add(1, Ordering::Relaxed);
     }
     pub fn inc_ws_bytes_received(&self, n: u64) {
-        self.ws_bytes_received.fetch_add(n, Ordering::SeqCst);
+        self.ws_bytes_received.fetch_add(n, Ordering::Relaxed);
     }
     pub fn inc_req_count(&self) {
-        self.req_count.fetch_add(1, Ordering::SeqCst);
+        self.req_count.fetch_add(1, Ordering::Relaxed);
     }
 }
 
