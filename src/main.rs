@@ -97,7 +97,7 @@ impl Handler<SaveLogs> for LogBuffer {
             );
             self.db_arbiter
                 .try_send(lb)
-                .unwrap_or_else(|e| error!("Failed to send NewSubstrateLog to DB actor - {:?}", e));
+                .unwrap_or_else(|e| error!("Failed to send LogBatch to DB arbiter - {:?}", e));
         }
         Ok(())
     }
