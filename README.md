@@ -1,6 +1,7 @@
 ## Substrate Save
 
-\* to connect to substrate-save you must whitelist your IP address in `deployment.template.yml`
+\* to connect to substrate-save you must whitelist your IP address CI 
+environment variable `LB_WHITELIST_RANGES`.
 
 Comprises a websocket server accepting incoming telemetry from multiple 
 [Substrate](https://github.com/paritytech/substrate) nodes. Substrate-save is designed to be resilient (to network errors), 
