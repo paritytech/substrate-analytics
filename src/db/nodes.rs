@@ -156,7 +156,7 @@ impl DbExecutor {
                  WHERE peer_id = $1) t \
                  GROUP BY t.log_type",
             )
-            .bind::<Text, _>(format!("{}", peer_id));
+            .bind::<Text, _>(peer_id.to_string());
             debug!(
                 "get_log_stats query: {}",
                 diesel::debug_query::<diesel::pg::Pg, _>(&query)
@@ -187,7 +187,7 @@ impl DbExecutor {
                  ORDER BY pc.id, ts ASC \
                  LIMIT $4",
             )
-            .bind::<Text, _>(format!("{}", peer_id))
+            .bind::<Text, _>(peer_id.to_string())
             .bind::<Timestamp, _>(
                 filters
                     .start_time
@@ -206,10 +206,7 @@ impl DbExecutor {
             let result: QueryResult<Vec<PeerInfoDb>> = query.get_results(conn);
             result
         }) {
-            Ok(Ok(v)) => {
-                let ncs: Vec<PeerInfo> = v.into_iter().map(|r| PeerInfo::from(r)).collect();
-                Ok(json!(ncs))
-            }
+            Ok(Ok(v)) => Ok(json!(v)),
             Ok(Err(e)) => Err(e.into()),
             Err(e) => Err(e.into()),
         }
@@ -245,7 +242,7 @@ impl DbExecutor {
                  ORDER BY ts DESC \
                  LIMIT $4",
             )
-            .bind::<Text, _>(format!("{}", peer_id))
+            .bind::<Text, _>(peer_id.to_string())
             .bind::<Timestamp, _>(
                 filters
                     .start_time
@@ -294,7 +291,7 @@ impl DbExecutor {
                  ORDER BY ts DESC \
                  LIMIT $5",
             )
-            .bind::<Text, _>(format!("{}", peer_id))
+            .bind::<Text, _>(peer_id.to_string())
             .bind::<Timestamp, _>(
                 filters
                     .start_time

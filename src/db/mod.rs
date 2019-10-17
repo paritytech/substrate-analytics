@@ -103,7 +103,7 @@ impl Handler<PeerConnection> for DbExecutor {
                 .execute(conn)
         });
         if let Ok(ir) = result {
-            if let Ok(_) = ir {
+            if ir.is_ok() {
                 return Ok(());
             }
         };

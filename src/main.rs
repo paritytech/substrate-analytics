@@ -40,7 +40,7 @@ use crate::db::*;
 use actix::prelude::*;
 use actix_web::{middleware, App, HttpServer};
 
-const HOURS_32_YEARS: u32 = 280320;
+const HOURS_32_YEARS: u32 = 280_320;
 
 lazy_static! {
     /// Must be set
