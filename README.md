@@ -1,9 +1,9 @@
-## Substrate Save
+## Substrate Analytics
 
-\* to connect to substrate-save you must whitelist your IP address in `deployment.template.yml`
+\* to connect to substrate-analytics you must whitelist your IP address in `deployment.template.yml`
 
 Comprises a websocket server accepting incoming telemetry from multiple 
-[Substrate](https://github.com/paritytech/substrate) nodes. Substrate-save is designed to be resilient (to network errors), 
+[Substrate](https://github.com/paritytech/substrate) nodes. substrate-analytics is designed to be resilient (to network errors), 
 performant and easily horizontally scalable by deploying more servers.
 
 Telemetry is stored in a PostgreSQL database. Management of the database schema is via `diesel` migrations.
@@ -21,7 +21,7 @@ appropriate (to be determined) database tables.
 - **`/`** 
   - incoming telemetry (with expiry as set by `LOG_EXPIRY_HOURS`) (ws) - set with this option in substrate cli: `--telemetry-url 'ws://127.0.0.1:8080 5'`
 - **`/audit`** 
-  - incoming telemetry with no expiry (ws) - set with this option in substrate cli: `--telemetry-url 'ws://127.0.0.1:8080 5'`
+  - incoming telemetry with no expiry (ws) - set with this option in substrate cli: `--telemetry-url 'ws://127.0.0.1:8080/audit 5'`
 
 JSON endpoints for convenience:
 - **`/stats/db`** 
@@ -43,6 +43,10 @@ given peer_id)
 - `end_time` in the format: `2019-01-01T00:00:00`
 - `limit` in the format: `100`
 
+#### Monitoring
+
+Substrate Analytics provides a `/metrics` endpoint for Prometheus.
+
 ### Set up for development and deployment
 
 - (for development) create a `.env` file in project root containing: (eg) 
@@ -62,7 +66,7 @@ Optionally specify the following environment variables:
 - `MAX_PENDING_CONNECTIONS` (default: 8192)
 - `WS_MAX_PAYLOAD` (default: 524_288)
 - `NUM_THREADS` (default: CPUs * 3)
-- `DATABASE_POOL_SIZE` (default: 10)
+- `DATABASE_POOL_SIZE` (default: `NUM_THREADS`)
 - `DB_BATCH_SIZE` (default: 1024) - batch size for insert
 - `DB_SAVE_LATENCY_MS` (default: 100) - max latency (ms) for insert
 
@@ -70,7 +74,7 @@ To allow logging you must set:
 
 - `RUST_LOG` to some log level
 
-Log messages are batched together in each actor before `INSERT` 
-\- up to 128 messages or 100ms, whichever is reached sooner. 
+Log messages are batched together before sending off to DB actor for `INSERT` 
+\- up to 1024 messages or 100ms, whichever is reached sooner. 
 
 ---

@@ -1,3 +1,19 @@
+// Copyright 2019 Parity Technologies (UK) Ltd.
+// This file is part of Substrate Analytics.
+
+// Substrate Analytics is free software: you can redistribute it and/or modify
+// it under the terms of the GNU General Public License as published by
+// the Free Software Foundation, either version 3 of the License, or
+// (at your option) any later version.
+
+// Substrate Analytics is distributed in the hope that it will be useful,
+// but WITHOUT ANY WARRANTY; without even the implied warranty of
+// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+// GNU General Public License for more details.
+
+// You should have received a copy of the GNU General Public License
+// along with Substrate Analytics.  If not, see <http://www.gnu.org/licenses/>.
+
 use super::metrics::Metrics;
 use crate::db::*;
 use crate::db::{
@@ -5,23 +21,32 @@ use crate::db::{
     nodes::{NodeQueryType, NodesQuery},
 };
 use actix::prelude::*;
-use actix_web::{web as a_web, Error as AWError, HttpRequest, HttpResponse};
+use actix_web::{Error as AWError, HttpRequest, HttpResponse};
 use futures::Future;
 
-pub fn configure(cfg: &mut a_web::ServiceConfig) {
+pub fn configure(cfg: &mut actix_web::web::ServiceConfig) {
     cfg.service(
-        a_web::scope("/nodes")
-            .route("/{peer_id}/peer_counts", a_web::get().to_async(peer_counts))
-            .route("/{peer_id}/logs/{msg_type}", a_web::get().to_async(logs))
-            .route("/{peer_id}/logs", a_web::get().to_async(all_logs))
-            .route("/{peer_id}/log_stats", a_web::get().to_async(log_stats))
-            .route("", a_web::get().to_async(all_nodes)),
+        actix_web::web::scope("/nodes")
+            .route(
+                "/{peer_id}/peer_counts",
+                actix_web::web::get().to_async(peer_counts),
+            )
+            .route(
+                "/{peer_id}/logs/{msg_type}",
+                actix_web::web::get().to_async(logs),
+            )
+            .route("/{peer_id}/logs", actix_web::web::get().to_async(all_logs))
+            .route(
+                "/{peer_id}/log_stats",
+                actix_web::web::get().to_async(log_stats),
+            )
+            .route("", actix_web::web::get().to_async(all_nodes)),
     );
 }
 
 fn all_nodes(
-    db: a_web::Data<Addr<DbExecutor>>,
-    metrics: a_web::Data<Metrics>,
+    db: actix_web::web::Data<Addr<DbExecutor>>,
+    metrics: actix_web::web::Data<Metrics>,
 ) -> impl Future<Item = HttpResponse, Error = AWError> {
     metrics.inc_req_count();
     send_query(NodesQuery::AllNodes, db)
@@ -29,8 +54,8 @@ fn all_nodes(
 
 fn log_stats(
     req: HttpRequest,
-    db: a_web::Data<Addr<DbExecutor>>,
-    metrics: a_web::Data<Metrics>,
+    db: actix_web::web::Data<Addr<DbExecutor>>,
+    metrics: actix_web::web::Data<Metrics>,
 ) -> impl Future<Item = HttpResponse, Error = AWError> {
     metrics.inc_req_count();
     let peer_id = req
@@ -38,7 +63,7 @@ fn log_stats(
         .get("peer_id")
         .expect("peer_id should be available because the route matched")
         .to_string();
-    let filters = match a_web::Query::<Filters>::from_query(&req.query_string()) {
+    let filters = match actix_web::web::Query::<Filters>::from_query(&req.query_string()) {
         Ok(f) => f.clone(),
         Err(_) => {
             warn!("Error deserializing Filters from querystring");
@@ -57,8 +82,8 @@ fn log_stats(
 
 fn peer_counts(
     req: HttpRequest,
-    db: a_web::Data<Addr<DbExecutor>>,
-    metrics: a_web::Data<Metrics>,
+    db: actix_web::web::Data<Addr<DbExecutor>>,
+    metrics: actix_web::web::Data<Metrics>,
 ) -> impl Future<Item = HttpResponse, Error = AWError> {
     metrics.inc_req_count();
     let peer_id = req
@@ -66,7 +91,7 @@ fn peer_counts(
         .get("peer_id")
         .expect("peer_id should be available because the route matched")
         .to_string();
-    let filters = match a_web::Query::<Filters>::from_query(&req.query_string()) {
+    let filters = match actix_web::web::Query::<Filters>::from_query(&req.query_string()) {
         Ok(f) => f.clone(),
         Err(_) => {
             warn!("Error deserializing Filters from querystring");
@@ -85,8 +110,8 @@ fn peer_counts(
 
 fn all_logs(
     req: HttpRequest,
-    db: a_web::Data<Addr<DbExecutor>>,
-    metrics: a_web::Data<Metrics>,
+    db: actix_web::web::Data<Addr<DbExecutor>>,
+    metrics: actix_web::web::Data<Metrics>,
 ) -> impl Future<Item = HttpResponse, Error = AWError> {
     metrics.inc_req_count();
     let peer_id = req
@@ -94,7 +119,7 @@ fn all_logs(
         .get("peer_id")
         .expect("peer_id should be available because the route matched")
         .to_string();
-    let filters = match a_web::Query::<Filters>::from_query(&req.query_string()) {
+    let filters = match actix_web::web::Query::<Filters>::from_query(&req.query_string()) {
         Ok(f) => f.clone(),
         Err(_) => {
             warn!("Error deserializing Filters from querystring");
@@ -113,8 +138,8 @@ fn all_logs(
 
 fn logs(
     req: HttpRequest,
-    db: a_web::Data<Addr<DbExecutor>>,
-    metrics: a_web::Data<Metrics>,
+    db: actix_web::web::Data<Addr<DbExecutor>>,
+    metrics: actix_web::web::Data<Metrics>,
 ) -> impl Future<Item = HttpResponse, Error = AWError> {
     metrics.inc_req_count();
     let peer_id = req
@@ -127,7 +152,7 @@ fn logs(
         .get("msg_type")
         .expect("msg_type should be available because the route matched")
         .to_string();
-    let query = a_web::Query::<Filters>::from_query(&req.query_string());
+    let query = actix_web::web::Query::<Filters>::from_query(&req.query_string());
     let filters = match query {
         Ok(f) => f.clone(),
         Err(_) => {
@@ -147,7 +172,7 @@ fn logs(
 
 fn send_query(
     query: NodesQuery,
-    db: a_web::Data<Addr<DbExecutor>>,
+    db: actix_web::web::Data<Addr<DbExecutor>>,
 ) -> impl Future<Item = HttpResponse, Error = AWError> {
     db.send(query).from_err().and_then(move |res| match res {
         Ok(r) => Ok(HttpResponse::Ok().json(r)),

@@ -1,3 +1,19 @@
+// Copyright 2019 Parity Technologies (UK) Ltd.
+// This file is part of Substrate Analytics.
+
+// Substrate Analytics is free software: you can redistribute it and/or modify
+// it under the terms of the GNU General Public License as published by
+// the Free Software Foundation, either version 3 of the License, or
+// (at your option) any later version.
+
+// Substrate Analytics is distributed in the hope that it will be useful,
+// but WITHOUT ANY WARRANTY; without even the implied warranty of
+// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+// GNU General Public License for more details.
+
+// You should have received a copy of the GNU General Public License
+// along with Substrate Analytics.  If not, see <http://www.gnu.org/licenses/>.
+
 use super::metrics::Metrics;
 use crate::db::{
     models::{NewPeerConnection, NewSubstrateLog, PeerConnection},
@@ -6,7 +22,7 @@ use crate::db::{
 use crate::{LogBuffer, CLIENT_TIMEOUT, HEARTBEAT_INTERVAL, WS_MAX_PAYLOAD};
 use actix::prelude::*;
 use actix_http::ws::Codec;
-use actix_web::{error, web as a_web, Error, HttpRequest, HttpResponse};
+use actix_web::{error, Error, HttpRequest, HttpResponse};
 use actix_web_actors::ws;
 use chrono::DateTime;
 use serde_json::Value;
@@ -34,9 +50,9 @@ impl fmt::Display for MessageCount {
 struct NodeSocket {
     hb: Instant,
     ip: String,
-    db: a_web::Data<Addr<DbExecutor>>,
-    log_buffer: a_web::Data<Addr<LogBuffer>>,
-    metrics: a_web::Data<Metrics>,
+    db: actix_web::web::Data<Addr<DbExecutor>>,
+    log_buffer: actix_web::web::Data<Addr<LogBuffer>>,
+    metrics: actix_web::web::Data<Metrics>,
     // Indicate if the logs should be saved to a different table that is not automatically purged
     peer_connection: PeerConnection,
     msg_count: MessageCount,
@@ -52,9 +68,9 @@ impl Drop for NodeSocket {
 impl NodeSocket {
     fn new(
         ip: String,
-        db: a_web::Data<Addr<DbExecutor>>,
-        log_buffer: a_web::Data<Addr<LogBuffer>>,
-        metrics: a_web::Data<Metrics>,
+        db: actix_web::web::Data<Addr<DbExecutor>>,
+        log_buffer: actix_web::web::Data<Addr<LogBuffer>>,
+        metrics: actix_web::web::Data<Metrics>,
         audit: bool,
     ) -> Result<Self, String> {
         Ok(Self {
@@ -69,7 +85,7 @@ impl NodeSocket {
     }
 
     fn create_peer_connection(
-        db: &a_web::Data<Addr<DbExecutor>>,
+        db: &actix_web::web::Data<Addr<DbExecutor>>,
         ip: &str,
         audit: bool,
     ) -> Result<PeerConnection, String> {
@@ -195,21 +211,21 @@ impl StreamHandler<ws::Message, ws::ProtocolError> for NodeSocket {
     }
 }
 
-pub fn configure(cfg: &mut a_web::ServiceConfig) {
+pub fn configure(cfg: &mut actix_web::web::ServiceConfig) {
     cfg.service(
-        a_web::scope("/")
-            .route("audit", a_web::get().to_async(ws_index_permanent))
-            .route("", a_web::get().to_async(ws_index)),
+        actix_web::web::scope("/")
+            .route("audit", actix_web::web::get().to_async(ws_index_permanent))
+            .route("", actix_web::web::get().to_async(ws_index)),
     );
 }
 
 // Websocket handshake and start actor
 fn ws_index(
     r: HttpRequest,
-    stream: a_web::Payload,
-    db: a_web::Data<Addr<DbExecutor>>,
-    log_buffer: a_web::Data<Addr<LogBuffer>>,
-    metrics: a_web::Data<Metrics>,
+    stream: actix_web::web::Payload,
+    db: actix_web::web::Data<Addr<DbExecutor>>,
+    log_buffer: actix_web::web::Data<Addr<LogBuffer>>,
+    metrics: actix_web::web::Data<Metrics>,
 ) -> Result<HttpResponse, Error> {
     establish_connection(r, stream, db, log_buffer, metrics, false)
 }
@@ -217,20 +233,20 @@ fn ws_index(
 // Websocket handshake and start actor
 fn ws_index_permanent(
     r: HttpRequest,
-    stream: a_web::Payload,
-    db: a_web::Data<Addr<DbExecutor>>,
-    log_buffer: a_web::Data<Addr<LogBuffer>>,
-    metrics: a_web::Data<Metrics>,
+    stream: actix_web::web::Payload,
+    db: actix_web::web::Data<Addr<DbExecutor>>,
+    log_buffer: actix_web::web::Data<Addr<LogBuffer>>,
+    metrics: actix_web::web::Data<Metrics>,
 ) -> Result<HttpResponse, Error> {
     establish_connection(r, stream, db, log_buffer, metrics, true)
 }
 
 fn establish_connection(
     r: HttpRequest,
-    stream: a_web::Payload,
-    db: a_web::Data<Addr<DbExecutor>>,
-    log_buffer: a_web::Data<Addr<LogBuffer>>,
-    metrics: a_web::Data<Metrics>,
+    stream: actix_web::web::Payload,
+    db: actix_web::web::Data<Addr<DbExecutor>>,
+    log_buffer: actix_web::web::Data<Addr<LogBuffer>>,
+    metrics: actix_web::web::Data<Metrics>,
     audit: bool,
 ) -> Result<HttpResponse, Error> {
     let ip = r

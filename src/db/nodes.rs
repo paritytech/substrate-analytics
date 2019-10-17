@@ -1,3 +1,19 @@
+// Copyright 2019 Parity Technologies (UK) Ltd.
+// This file is part of Substrate Analytics.
+
+// Substrate Analytics is free software: you can redistribute it and/or modify
+// it under the terms of the GNU General Public License as published by
+// the Free Software Foundation, either version 3 of the License, or
+// (at your option) any later version.
+
+// Substrate Analytics is distributed in the hope that it will be useful,
+// but WITHOUT ANY WARRANTY; without even the implied warranty of
+// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+// GNU General Public License for more details.
+
+// You should have received a copy of the GNU General Public License
+// along with Substrate Analytics.  If not, see <http://www.gnu.org/licenses/>.
+
 use actix::prelude::*;
 use chrono::{NaiveDateTime, Utc};
 use diesel::sql_types::*;
@@ -140,7 +156,7 @@ impl DbExecutor {
                  WHERE peer_id = $1) t \
                  GROUP BY t.log_type",
             )
-            .bind::<Text, _>(format!("{}", peer_id));
+            .bind::<Text, _>(peer_id.to_string());
             debug!(
                 "get_log_stats query: {}",
                 diesel::debug_query::<diesel::pg::Pg, _>(&query)
@@ -171,7 +187,7 @@ impl DbExecutor {
                  ORDER BY pc.id, ts ASC \
                  LIMIT $4",
             )
-            .bind::<Text, _>(format!("{}", peer_id))
+            .bind::<Text, _>(peer_id.to_string())
             .bind::<Timestamp, _>(
                 filters
                     .start_time
@@ -190,10 +206,7 @@ impl DbExecutor {
             let result: QueryResult<Vec<PeerInfoDb>> = query.get_results(conn);
             result
         }) {
-            Ok(Ok(v)) => {
-                let ncs: Vec<PeerInfo> = v.into_iter().map(|r| PeerInfo::from(r)).collect();
-                Ok(json!(ncs))
-            }
+            Ok(Ok(v)) => Ok(json!(v)),
             Ok(Err(e)) => Err(e.into()),
             Err(e) => Err(e.into()),
         }
@@ -229,7 +242,7 @@ impl DbExecutor {
                  ORDER BY ts DESC \
                  LIMIT $4",
             )
-            .bind::<Text, _>(format!("{}", peer_id))
+            .bind::<Text, _>(peer_id.to_string())
             .bind::<Timestamp, _>(
                 filters
                     .start_time
@@ -278,7 +291,7 @@ impl DbExecutor {
                  ORDER BY ts DESC \
                  LIMIT $5",
             )
-            .bind::<Text, _>(format!("{}", peer_id))
+            .bind::<Text, _>(peer_id.to_string())
             .bind::<Timestamp, _>(
                 filters
                     .start_time

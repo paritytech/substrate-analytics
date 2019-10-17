@@ -1,6 +1,6 @@
 [package]
-name = "save"
-version = "0.0.5"
+name = "substrate-analytics"
+version = "0.1.0"
 authors = ["Matt Rutherford <matt@parity.io>"]
 edition = "2018"
 
