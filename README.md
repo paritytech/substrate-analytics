@@ -3,7 +3,7 @@
 \* to connect to substrate-analytics you must whitelist your IP address in `deployment.template.yml`
 
 Comprises a websocket server accepting incoming telemetry from multiple 
-[Substrate](https://github.com/paritytech/substrate) nodes. Substrate-save is designed to be resilient (to network errors), 
+[Substrate](https://github.com/paritytech/substrate) nodes. substrate-analytics is designed to be resilient (to network errors), 
 performant and easily horizontally scalable by deploying more servers.
 
 Telemetry is stored in a PostgreSQL database. Management of the database schema is via `diesel` migrations.
@@ -43,6 +43,10 @@ given peer_id)
 - `end_time` in the format: `2019-01-01T00:00:00`
 - `limit` in the format: `100`
 
+#### Monitoring
+
+Substrate Analytics provides a `/metrics` endpoint for Prometheus.
+
 ### Set up for development and deployment
 
 - (for development) create a `.env` file in project root containing: (eg) 
@@ -70,7 +74,7 @@ To allow logging you must set:
 
 - `RUST_LOG` to some log level
 
-Log messages are batched together in each actor before `INSERT` 
+Log messages are batched together before sending off to DB actor for `INSERT` 
 \- up to 1024 messages or 100ms, whichever is reached sooner. 
 
 ---
