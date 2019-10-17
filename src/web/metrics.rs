@@ -1,5 +1,21 @@
+// Copyright 2019 Parity Technologies (UK) Ltd.
+// This file is part of Substrate Analytics.
+
+// Substrate Analytics is free software: you can redistribute it and/or modify
+// it under the terms of the GNU General Public License as published by
+// the Free Software Foundation, either version 3 of the License, or
+// (at your option) any later version.
+
+// Substrate Analytics is distributed in the hope that it will be useful,
+// but WITHOUT ANY WARRANTY; without even the implied warranty of
+// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+// GNU General Public License for more details.
+
+// You should have received a copy of the GNU General Public License
+// along with Substrate Analytics.  If not, see <http://www.gnu.org/licenses/>.
+
 use actix_web::{
-    http::StatusCode, web as a_web, Error as AWError, HttpRequest, HttpResponse, Result as AWResult,
+    http::StatusCode, Error as AWError, HttpRequest, HttpResponse, Result as AWResult,
 };
 use std::fmt;
 use std::sync::atomic::{AtomicU64, Ordering};
@@ -80,11 +96,14 @@ impl fmt::Display for Metrics {
     }
 }
 
-pub fn configure(cfg: &mut a_web::ServiceConfig) {
-    cfg.service(a_web::scope("/metrics").route("", a_web::get().to(root)));
+pub fn configure(cfg: &mut actix_web::web::ServiceConfig) {
+    cfg.service(actix_web::web::scope("/metrics").route("", actix_web::web::get().to(root)));
 }
 
-fn root(_r: HttpRequest, metrics: a_web::Data<Metrics>) -> AWResult<HttpResponse, AWError> {
+fn root(
+    _r: HttpRequest,
+    metrics: actix_web::web::Data<Metrics>,
+) -> AWResult<HttpResponse, AWError> {
     Ok(HttpResponse::build(StatusCode::OK)
         .content_type("text/plain; version=0.0.4; charset=utf-8")
         .body(metrics.to_string()))

@@ -1,6 +1,6 @@
-## Substrate Save
+## Substrate Analytics
 
-\* to connect to substrate-save you must whitelist your IP address in `deployment.template.yml`
+\* to connect to substrate-analytics you must whitelist your IP address in `deployment.template.yml`
 
 Comprises a websocket server accepting incoming telemetry from multiple 
 [Substrate](https://github.com/paritytech/substrate) nodes. Substrate-save is designed to be resilient (to network errors), 
@@ -21,7 +21,7 @@ appropriate (to be determined) database tables.
 - **`/`** 
   - incoming telemetry (with expiry as set by `LOG_EXPIRY_HOURS`) (ws) - set with this option in substrate cli: `--telemetry-url 'ws://127.0.0.1:8080 5'`
 - **`/audit`** 
-  - incoming telemetry with no expiry (ws) - set with this option in substrate cli: `--telemetry-url 'ws://127.0.0.1:8080 5'`
+  - incoming telemetry with no expiry (ws) - set with this option in substrate cli: `--telemetry-url 'ws://127.0.0.1:8080/audit 5'`
 
 JSON endpoints for convenience:
 - **`/stats/db`** 
@@ -62,7 +62,7 @@ Optionally specify the following environment variables:
 - `MAX_PENDING_CONNECTIONS` (default: 8192)
 - `WS_MAX_PAYLOAD` (default: 524_288)
 - `NUM_THREADS` (default: CPUs * 3)
-- `DATABASE_POOL_SIZE` (default: 10)
+- `DATABASE_POOL_SIZE` (default: `NUM_THREADS`)
 - `DB_BATCH_SIZE` (default: 1024) - batch size for insert
 - `DB_SAVE_LATENCY_MS` (default: 100) - max latency (ms) for insert
 
@@ -71,6 +71,6 @@ To allow logging you must set:
 - `RUST_LOG` to some log level
 
 Log messages are batched together in each actor before `INSERT` 
-\- up to 128 messages or 100ms, whichever is reached sooner. 
+\- up to 1024 messages or 100ms, whichever is reached sooner. 
 
 ---

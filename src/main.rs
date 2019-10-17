@@ -1,3 +1,19 @@
+// Copyright 2019 Parity Technologies (UK) Ltd.
+// This file is part of Substrate Analytics.
+
+// Substrate Analytics is free software: you can redistribute it and/or modify
+// it under the terms of the GNU General Public License as published by
+// the Free Software Foundation, either version 3 of the License, or
+// (at your option) any later version.
+
+// Substrate Analytics is distributed in the hope that it will be useful,
+// but WITHOUT ANY WARRANTY; without even the implied warranty of
+// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+// GNU General Public License for more details.
+
+// You should have received a copy of the GNU General Public License
+// along with Substrate Analytics.  If not, see <http://www.gnu.org/licenses/>.
+
 #[macro_use]
 extern crate log;
 extern crate env_logger;
@@ -114,6 +130,7 @@ fn main() {
     info!("Starting DbArbiter with {} threads", *NUM_THREADS);
     let db_arbiter = SyncArbiter::start(*NUM_THREADS, move || db::DbExecutor::new(pool.clone()));
     info!("DbExecutor started");
+
     let log_buffer = LogBuffer {
         logs: Vec::new(),
         db_arbiter: db_arbiter.clone().recipient(),
