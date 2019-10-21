@@ -1,4 +1,4 @@
-# substrate-save
+# substrate-analytics
 # deployment.template.yml
 #
 # use:
@@ -6,10 +6,10 @@
 #
 # the following variables have to be set:
 #
-# SUBSTRATE_SAVE_DB_URL postgres://username:password@localhost/save
+# SUBSTRATE_ANALYTICS_DB_URL postgres://username:password@localhost/save
 # WS_PORT can be 1024
 # REPLICAS
-# SUBSTRATE_SAVE_DOCKER_IMAGE
+# SUBSTRATE_ANALYTICS_DOCKER_IMAGE
 # 
 # HEARTBEAT_INTERVAL
 # CLIENT_TIMEOUT
@@ -23,12 +23,12 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: substrate-save
+  name: substrate-analytics
   namespace: $NAMESPACE
 spec:
   selector:
     matchLabels:
-      app: substrate-save
+      app: substrate-analytics
 
   replicas: $REPLICAS
   revisionHistoryLimit: 2
@@ -41,12 +41,12 @@ spec:
   template:
     metadata:
       labels:
-        app: substrate-save
+        app: substrate-analytics
 
     spec:
       containers:
-        - name: substrate-save
-          image: $SUBSTRATE_SAVE_DOCKER_IMAGE
+        - name: substrate-analytics
+          image: $SUBSTRATE_ANALYTICS_DOCKER_IMAGE
           imagePullPolicy: Always
           # command: ["/bin/sh"]
           # args:
@@ -58,10 +58,10 @@ spec:
           - containerPort: $WS_PORT
           env:
             - name: DATABASE_URL
-              value: "$SUBSTRATE_SAVE_DB_URL"
+              value: "$SUBSTRATE_ANALYTICS_DB_URL"
           envFrom:
             - configMapRef:
-                name: substrate-save
+                name: substrate-analytics
           readinessProbe:
             tcpSocket:
               port: $WS_PORT
@@ -76,7 +76,7 @@ spec:
 apiVersion: v1
 kind: ConfigMap
 metadata:
-  name: substrate-save
+  name: substrate-analytics
   namespace: $NAMESPACE
 data:
   PORT: "$WS_PORT"
@@ -85,18 +85,18 @@ data:
   PURGE_FREQUENCY: "$PURGE_FREQUENCY"
   MAX_PENDING_CONNECTIONS: "$MAX_PENDING_CONNECTIONS"
   DATABASE_POOL_SIZE: "$DATABASE_POOL_SIZE"
-  LOG_EXPIRY_HOURS: "$SAVE_LOG_EXPIRY_HOURS"
-  RUST_LOG: "$SAVE_RUST_LOG"
+  LOG_EXPIRY_HOURS: "$ANALYTICS_LOG_EXPIRY_HOURS"
+  RUST_LOG: "$ANALYTICS_RUST_LOG"
   WS_MAX_PAYLOAD: "$WS_MAX_PAYLOAD"
 ---
 apiVersion: v1
 kind: Service
 metadata:
-  name: substrate-save
+  name: substrate-analytics
   namespace: $NAMESPACE
 spec:
   selector:
-    app: substrate-save
+    app: substrate-analytics
   ports:
     - name: ws
       port: $WS_PORT
