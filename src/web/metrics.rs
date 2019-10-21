@@ -14,9 +14,7 @@
 // You should have received a copy of the GNU General Public License
 // along with Substrate Analytics.  If not, see <http://www.gnu.org/licenses/>.
 
-use actix_web::{
-    http::StatusCode, Error as AWError, HttpRequest, HttpResponse, Result as AWResult,
-};
+use actix_web::{http::StatusCode, HttpRequest, HttpResponse, Result as AWResult};
 use std::fmt;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
@@ -103,7 +101,7 @@ pub fn configure(cfg: &mut actix_web::web::ServiceConfig) {
 fn root(
     _r: HttpRequest,
     metrics: actix_web::web::Data<Metrics>,
-) -> AWResult<HttpResponse, AWError> {
+) -> AWResult<HttpResponse, actix_web::Error> {
     Ok(HttpResponse::build(StatusCode::OK)
         .content_type("text/plain; version=0.0.4; charset=utf-8")
         .body(metrics.to_string()))

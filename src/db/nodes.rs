@@ -198,7 +198,7 @@ impl DbExecutor {
                     .end_time
                     .unwrap_or_else(|| NaiveDateTime::from_timestamp(Utc::now().timestamp(), 0)),
             )
-            .bind::<Integer, _>(filters.limit.unwrap_or(1000));
+            .bind::<Integer, _>(filters.limit.unwrap_or(100));
             debug!(
                 "get_peer_counts query: {}",
                 diesel::debug_query::<diesel::pg::Pg, _>(&query)

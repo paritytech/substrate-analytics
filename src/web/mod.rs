@@ -16,5 +16,18 @@
 
 pub mod metrics;
 pub mod nodes;
+pub mod reputation;
 pub mod root;
 pub mod stats;
+
+use crate::db::filters::Filters;
+
+pub fn get_filters(req: &actix_web::HttpRequest) -> Filters {
+    match actix_web::web::Query::<Filters>::from_query(&req.query_string()) {
+        Ok(f) => f.clone(),
+        Err(_) => {
+            warn!("Error deserializing Filters from querystring");
+            Filters::default()
+        }
+    }
+}

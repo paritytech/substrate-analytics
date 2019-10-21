@@ -10,7 +10,7 @@ actix-web = "1.0.7"
 actix-web-actors = "1.0.2"
 actix-http = "*"
 
-diesel = { version = "1.4.2", features = ["postgres", "chrono", "network-address", "r2d2", "numeric", "serde_json"] }
+diesel = { version = "1.4.3", features = ["postgres", "chrono", "network-address", "r2d2", "numeric", "serde_json"] }
 bigdecimal = "0.0.11"
 chrono = { version = "0.4", features = ["serde"] }
 dotenv = "0.13.0"
