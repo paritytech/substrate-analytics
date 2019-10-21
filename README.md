@@ -37,10 +37,20 @@ given peer_id)
   - recent log messages, unprocessed
 - **`/nodes/{peer_id}/logs/{msg type}`** 
   - recent log messages, filtered by message type: `msg`
+- **`/reputation/{peer_id}`** 
+  - reported reputation for `peer_id` from the POV of other nodes
+- **`/reputation/logged`** 
+  - reported reputation for all peers from the POV of all logged (past/present) nodes
+- **`/reputation`** 
+  - reported reputation for all peers unfiltered
 
 `peer_counts` and `logs` routes take the following optional parameters (with sensible defaults if not specified):
 - `start_time` in the format: `2019-01-01T00:00:00`
 - `end_time` in the format: `2019-01-01T00:00:00`
+- `limit` in the format: `100`
+
+`reputation` routes take the following optional parameters (with sensible defaults if not specified):
+- `max_age_s` in the format: `10`
 - `limit` in the format: `100`
 
 #### Monitoring
@@ -75,6 +85,6 @@ To allow logging you must set:
 - `RUST_LOG` to some log level
 
 Log messages are batched together before sending off to DB actor for `INSERT` 
-\- up to 1024 messages or 100ms, whichever is reached sooner. 
+\- up to 1024 messages or `DB_SAVE_LATENCY_MS`, whichever is reached sooner. 
 
 ---
