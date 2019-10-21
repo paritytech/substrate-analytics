@@ -2,46 +2,46 @@
 
 \* to connect to substrate-analytics you must whitelist your IP address in `deployment.template.yml`
 
-Comprises a websocket server accepting incoming telemetry from multiple 
-[Substrate](https://github.com/paritytech/substrate) nodes. substrate-analytics is designed to be resilient (to network errors), 
+Comprises a websocket server accepting incoming telemetry from multiple
+[Substrate](https://github.com/paritytech/substrate) nodes. substrate-analytics is designed to be resilient (to network errors),
 performant and easily horizontally scalable by deploying more servers.
 
 Telemetry is stored in a PostgreSQL database. Management of the database schema is via `diesel` migrations.
 
 Stored data is purged from the DB according to `LOG_EXPIRY_HOURS`
 
-For convenience there are also some JSON endpoints to make ad-hoc queries, although it is expected that 
+For convenience there are also some JSON endpoints to make ad-hoc queries, although it is expected that
 the data is accessed directly from the database by a suitable dashboard (eg. Grafana).
 
-The next phase of the project with be to parse and structure the incoming logs into 
+The next phase of the project with be to parse and structure the incoming logs into
 appropriate (to be determined) database tables.
 
 #### Routes:
 
-- **`/`** 
+- **`/`**
   - incoming telemetry (with expiry as set by `LOG_EXPIRY_HOURS`) (ws) - set with this option in substrate cli: `--telemetry-url 'ws://127.0.0.1:8080 5'`
-- **`/audit`** 
+- **`/audit`**
   - incoming telemetry with no expiry (ws) - set with this option in substrate cli: `--telemetry-url 'ws://127.0.0.1:8080/audit 5'`
 
 JSON endpoints for convenience:
-- **`/stats/db`** 
+- **`/stats/db`**
   - stats for db showing table / index sizes on disk
-- **`/nodes`** 
+- **`/nodes`**
   - list of logged nodes
-- **`/nodes/{peer_id}/peer_counts`** 
-  - peer count history (for the 
+- **`/nodes/{peer_id}/peer_counts`**
+  - peer count history (for the
 given peer_id)
-- **`/nodes/{peer_id}/log_stats`** 
+- **`/nodes/{peer_id}/log_stats`**
   - shows the quantity of each type of log message received
-- **`/nodes/{peer_id}/logs`** 
+- **`/nodes/{peer_id}/logs`**
   - recent log messages, unprocessed
-- **`/nodes/{peer_id}/logs/{msg type}`** 
+- **`/nodes/{peer_id}/logs/{msg type}`**
   - recent log messages, filtered by message type: `msg`
-- **`/reputation/{peer_id}`** 
+- **`/reputation/{peer_id}`**
   - reported reputation for `peer_id` from the POV of other nodes
-- **`/reputation/logged`** 
+- **`/reputation/logged`**
   - reported reputation for all peers from the POV of all logged (past/present) nodes
-- **`/reputation`** 
+- **`/reputation`**
   - reported reputation for all peers unfiltered
 
 `peer_counts` and `logs` routes take the following optional parameters (with sensible defaults if not specified):
@@ -59,8 +59,8 @@ Substrate Analytics provides a `/metrics` endpoint for Prometheus.
 
 ### Set up for development and deployment
 
-- (for development) create a `.env` file in project root containing: (eg) 
-    - `DATABASE_URL=postgres://username:password@localhost/save` 
+- (for development) create a `.env` file in project root containing: (eg)
+    - `DATABASE_URL=postgres://username:password@localhost/substrate-analytics`
     - `PORT=8080`
 - install [Diesel cli](https://github.com/diesel-rs/diesel/tree/master/diesel_cli)
 - you might need [additional packages](https://github.com/diesel-rs/diesel/blob/master/guide_drafts/backend_installation.md)
@@ -84,7 +84,7 @@ To allow logging you must set:
 
 - `RUST_LOG` to some log level
 
-Log messages are batched together before sending off to DB actor for `INSERT` 
-\- up to 1024 messages or `DB_SAVE_LATENCY_MS`, whichever is reached sooner. 
+Log messages are batched together before sending off to DB actor for `INSERT`
+\- up to 1024 messages or `DB_SAVE_LATENCY_MS`, whichever is reached sooner.
 
 ---
