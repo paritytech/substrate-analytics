@@ -7,10 +7,10 @@ RUN apt-get update && \
 
 # build diesel first as there may be no changes and caching will be used
 RUN echo "building diesel-cli" && \
-  cargo install diesel_cli --root /substrate-save --bin diesel --force --no-default-features --features postgres
+  cargo install diesel_cli --root /substrate-analytics --bin diesel --force --no-default-features --features postgres
 
 
-WORKDIR /substrate-save
+WORKDIR /substrate-analytics
 
 # speed up docker build using pre-build dependencies
 # http://whitfin.io/speeding-up-rust-docker-builds/
@@ -30,7 +30,7 @@ COPY ./src ./src
 
 # ADD ./ ./
 
-RUN echo "building substrate-save" && \
+RUN echo "building substrate-analytics" && \
   cargo build --release
 
 
@@ -40,9 +40,9 @@ FROM debian:stretch-slim
 # metadata
 LABEL maintainer="devops-team@parity.io" \
   vendor="Parity Technologies" \
-  name="parity/substrate-save" \
+  name="parity/substrate-analytics" \
   description="Substrate Analytical and Visual Environment - Incoming telemetry" \
-  url="https://github.com/paritytech/substrate-save/" \
+  url="https://github.com/paritytech/substrate-analytics/" \
   vcs-url="./"
 
 
@@ -53,16 +53,16 @@ RUN apt-get update && \
     apt-get clean && \
     find /var/lib/apt/lists/ -type f -not -name lock -delete
 
-RUN useradd -m -u 1000 -U -s /bin/sh -d /save save
+RUN useradd -m -u 1000 -U -s /bin/sh -d /analytics analytics
 
-COPY --from=builder /substrate-save/target/release/save /usr/local/bin/
-COPY --from=builder /substrate-save/bin/diesel /usr/local/bin/
+COPY --from=builder /substrate-analytics/target/release/analytics /usr/local/bin/
+COPY --from=builder /substrate-analytics/bin/diesel /usr/local/bin/
 
-COPY ./migrations /save/migrations
+COPY ./migrations /analytics/migrations
 
-WORKDIR /save
-USER save
+WORKDIR /analytics
+USER analytics
 ENV RUST_BACKTRACE 1
 
 
-ENTRYPOINT [ "/bin/sh", "-c", "/usr/local/bin/diesel migration run && exec /usr/local/bin/save"]
+ENTRYPOINT [ "/bin/sh", "-c", "/usr/local/bin/diesel migration run && exec /usr/local/bin/analytics"]
