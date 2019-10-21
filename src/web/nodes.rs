@@ -14,14 +14,12 @@
 // You should have received a copy of the GNU General Public License
 // along with Substrate Analytics.  If not, see <http://www.gnu.org/licenses/>.
 
+use super::get_filters;
 use super::metrics::Metrics;
+use crate::db::nodes::{NodeQueryType, NodesQuery};
 use crate::db::*;
-use crate::db::{
-    filters::Filters,
-    nodes::{NodeQueryType, NodesQuery},
-};
 use actix::prelude::*;
-use actix_web::{Error as AWError, HttpRequest, HttpResponse};
+use actix_web::{HttpRequest, HttpResponse};
 use futures::Future;
 
 pub fn configure(cfg: &mut actix_web::web::ServiceConfig) {
@@ -47,7 +45,7 @@ pub fn configure(cfg: &mut actix_web::web::ServiceConfig) {
 fn all_nodes(
     db: actix_web::web::Data<Addr<DbExecutor>>,
     metrics: actix_web::web::Data<Metrics>,
-) -> impl Future<Item = HttpResponse, Error = AWError> {
+) -> impl Future<Item = HttpResponse, Error = actix_web::Error> {
     metrics.inc_req_count();
     send_query(NodesQuery::AllNodes, db)
 }
@@ -56,20 +54,14 @@ fn log_stats(
     req: HttpRequest,
     db: actix_web::web::Data<Addr<DbExecutor>>,
     metrics: actix_web::web::Data<Metrics>,
-) -> impl Future<Item = HttpResponse, Error = AWError> {
+) -> impl Future<Item = HttpResponse, Error = actix_web::Error> {
     metrics.inc_req_count();
     let peer_id = req
         .match_info()
         .get("peer_id")
         .expect("peer_id should be available because the route matched")
         .to_string();
-    let filters = match actix_web::web::Query::<Filters>::from_query(&req.query_string()) {
-        Ok(f) => f.clone(),
-        Err(_) => {
-            warn!("Error deserializing Filters from querystring");
-            Filters::default()
-        }
-    };
+    let filters = get_filters(&req);
     send_query(
         NodesQuery::Node {
             peer_id,
@@ -84,20 +76,14 @@ fn peer_counts(
     req: HttpRequest,
     db: actix_web::web::Data<Addr<DbExecutor>>,
     metrics: actix_web::web::Data<Metrics>,
-) -> impl Future<Item = HttpResponse, Error = AWError> {
+) -> impl Future<Item = HttpResponse, Error = actix_web::Error> {
     metrics.inc_req_count();
     let peer_id = req
         .match_info()
         .get("peer_id")
         .expect("peer_id should be available because the route matched")
         .to_string();
-    let filters = match actix_web::web::Query::<Filters>::from_query(&req.query_string()) {
-        Ok(f) => f.clone(),
-        Err(_) => {
-            warn!("Error deserializing Filters from querystring");
-            Filters::default()
-        }
-    };
+    let filters = get_filters(&req);
     send_query(
         NodesQuery::Node {
             peer_id,
@@ -112,20 +98,14 @@ fn all_logs(
     req: HttpRequest,
     db: actix_web::web::Data<Addr<DbExecutor>>,
     metrics: actix_web::web::Data<Metrics>,
-) -> impl Future<Item = HttpResponse, Error = AWError> {
+) -> impl Future<Item = HttpResponse, Error = actix_web::Error> {
     metrics.inc_req_count();
     let peer_id = req
         .match_info()
         .get("peer_id")
         .expect("peer_id should be available because the route matched")
         .to_string();
-    let filters = match actix_web::web::Query::<Filters>::from_query(&req.query_string()) {
-        Ok(f) => f.clone(),
-        Err(_) => {
-            warn!("Error deserializing Filters from querystring");
-            Filters::default()
-        }
-    };
+    let filters = get_filters(&req);
     send_query(
         NodesQuery::Node {
             peer_id,
@@ -140,7 +120,7 @@ fn logs(
     req: HttpRequest,
     db: actix_web::web::Data<Addr<DbExecutor>>,
     metrics: actix_web::web::Data<Metrics>,
-) -> impl Future<Item = HttpResponse, Error = AWError> {
+) -> impl Future<Item = HttpResponse, Error = actix_web::Error> {
     metrics.inc_req_count();
     let peer_id = req
         .match_info()
@@ -152,14 +132,7 @@ fn logs(
         .get("msg_type")
         .expect("msg_type should be available because the route matched")
         .to_string();
-    let query = actix_web::web::Query::<Filters>::from_query(&req.query_string());
-    let filters = match query {
-        Ok(f) => f.clone(),
-        Err(_) => {
-            warn!("Error deserializing Filters from querystring");
-            Filters::default()
-        }
-    };
+    let filters = get_filters(&req);
     send_query(
         NodesQuery::Node {
             peer_id,
@@ -173,7 +146,7 @@ fn logs(
 fn send_query(
     query: NodesQuery,
     db: actix_web::web::Data<Addr<DbExecutor>>,
-) -> impl Future<Item = HttpResponse, Error = AWError> {
+) -> impl Future<Item = HttpResponse, Error = actix_web::Error> {
     db.send(query).from_err().and_then(move |res| match res {
         Ok(r) => Ok(HttpResponse::Ok().json(r)),
         Err(e) => {

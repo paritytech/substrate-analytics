@@ -26,8 +26,18 @@ use chrono::NaiveDateTime;
 pub struct Filters {
     pub start_time: Option<NaiveDateTime>,
     pub end_time: Option<NaiveDateTime>,
+    pub max_age_s: Option<i64>,
     pub limit: Option<i32>,
 }
+
+//impl Default for Filters {
+//    fn default() -> Self {
+//        Filters {
+//            max_age_s: Some(60),
+//            ..Default::default()
+//        }
+//    }
+//}
 
 //impl Filters {
 //    pub fn from_hashmap(hashmap: Ref<HashMap<String, String>>) -> Result<Self, Vec<String>> {

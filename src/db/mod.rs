@@ -17,6 +17,7 @@
 pub mod filters;
 pub mod models;
 pub mod nodes;
+pub mod reputation;
 pub mod stats;
 
 use actix::prelude::*;

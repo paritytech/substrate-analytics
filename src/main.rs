@@ -164,6 +164,7 @@ fn main() {
             .wrap(middleware::NormalizePath)
             .wrap(middleware::Logger::default())
             .configure(web::nodes::configure)
+            .configure(web::reputation::configure)
             .configure(web::stats::configure)
             .configure(web::metrics::configure)
             .configure(web::root::configure)

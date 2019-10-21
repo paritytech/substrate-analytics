@@ -17,7 +17,7 @@
 use super::metrics::Metrics;
 use crate::db::{stats::Query, DbExecutor};
 use actix::prelude::*;
-use actix_web::{http::StatusCode, Error as AWError, HttpResponse, Result as AWResult};
+use actix_web::{http::StatusCode, HttpResponse, Result as AWResult};
 use futures::Future;
 
 lazy_static! {
@@ -40,7 +40,7 @@ pub fn configure(cfg: &mut actix_web::web::ServiceConfig) {
 fn send_query(
     db: actix_web::web::Data<Addr<DbExecutor>>,
     metrics: actix_web::web::Data<Metrics>,
-) -> impl Future<Item = HttpResponse, Error = AWError> {
+) -> impl Future<Item = HttpResponse, Error = actix_web::Error> {
     metrics.inc_req_count();
     db.send(Query::Db)
         .from_err()
