@@ -65,4 +65,4 @@ USER analytics
 ENV RUST_BACKTRACE 1
 
 
-ENTRYPOINT [ "/bin/sh", "-c", "/usr/local/bin/diesel migration run && exec /usr/local/bin/substrate-analytics"]
+ENTRYPOINT [ "/bin/sh", "-x", "-c", "/usr/local/bin/diesel migration run && exec /usr/local/bin/substrate-analytics"]

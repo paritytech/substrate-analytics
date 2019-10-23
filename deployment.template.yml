@@ -32,7 +32,7 @@ spec:
 
   replicas: $REPLICAS
   revisionHistoryLimit: 2
-  minReadySeconds: 3
+  # minReadySeconds: 3
   strategy:
     rollingUpdate:
       maxUnavailable: 0
