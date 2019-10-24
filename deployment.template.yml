@@ -32,7 +32,7 @@ spec:
 
   replicas: $REPLICAS
   revisionHistoryLimit: 2
-  # minReadySeconds: 3
+  minReadySeconds: 3
   strategy:
     rollingUpdate:
       maxUnavailable: 0
@@ -48,12 +48,6 @@ spec:
         - name: substrate-analytics
           image: $SUBSTRATE_ANALYTICS_DOCKER_IMAGE
           imagePullPolicy: Always
-          # command: ["/bin/sh"]
-          # args:
-          #   - "-x"
-          #   - "-c"
-          #   - >
-          #     sleep 600
           ports:
           - containerPort: $WS_PORT
           env:
@@ -88,6 +82,19 @@ data:
   LOG_EXPIRY_HOURS: "$ANALYTICS_LOG_EXPIRY_HOURS"
   RUST_LOG: "$ANALYTICS_RUST_LOG"
   WS_MAX_PAYLOAD: "$WS_MAX_PAYLOAD"
+---
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: substrate-analytics
+  namespace: $NAMESPACE
+spec:
+  selector:
+    matchLabels:
+      app: substrate-analytics
+  endpoints:
+  - port: ws
+    interval: 30s
 ---
 apiVersion: v1
 kind: Service
