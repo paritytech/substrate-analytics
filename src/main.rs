@@ -123,8 +123,8 @@ fn main() {
     dotenv().ok();
     env_logger::init();
     log_statics();
-    info!("Starting Substrate Analytics");
-    let sys = actix::System::new("substrate-save");
+    info!("Starting Substrate SAVE");
+    let sys = actix::System::new("substrate-analytics");
     info!("Creating database pool");
     let pool = create_pool();
     info!("Starting DbArbiter with {} threads", *NUM_THREADS);

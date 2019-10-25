@@ -22,7 +22,7 @@ COPY ./Cargo.toml ./Cargo.toml
 
 # this build step will cache your dependencies
 RUN cargo build --release
-RUN rm -rf ./src ./target/release/deps/save-*
+RUN rm -rf ./src ./target/release/deps/substrate_analytics-*
 
 # copy your source tree
 COPY ./src ./src
@@ -65,4 +65,4 @@ USER analytics
 ENV RUST_BACKTRACE 1
 
 
-ENTRYPOINT [ "/bin/sh", "-c", "/usr/local/bin/diesel migration run && exec /usr/local/bin/substrate-analytics"]
+ENTRYPOINT [ "/bin/sh", "-x", "-c", "/usr/local/bin/diesel migration run && exec /usr/local/bin/substrate-analytics"]
