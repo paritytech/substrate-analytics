@@ -85,6 +85,6 @@ To allow logging you must set:
 - `RUST_LOG` to some log level
 
 Log messages are batched together before sending off to DB actor for `INSERT`
-\- up to 1024 messages or `DB_SAVE_LATENCY_MS`, whichever is reached sooner.
+\- up to `DB_BATCH_SIZE` messages or `DB_SAVE_LATENCY_MS`, whichever is reached sooner.
 
 ---

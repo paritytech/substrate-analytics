@@ -123,7 +123,7 @@ fn main() {
     dotenv().ok();
     env_logger::init();
     log_statics();
-    info!("Starting Substrate SAVE");
+    info!("Starting Substrate Analytics");
     let sys = actix::System::new("substrate-save");
     info!("Creating database pool");
     let pool = create_pool();
@@ -167,6 +167,7 @@ fn main() {
             .configure(web::reputation::configure)
             .configure(web::stats::configure)
             .configure(web::metrics::configure)
+            .configure(web::pages::configure)
             .configure(web::root::configure)
     })
     .backlog(*MAX_PENDING_CONNECTIONS)
