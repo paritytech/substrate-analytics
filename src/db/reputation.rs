@@ -17,11 +17,10 @@
 use super::DbExecutor;
 use crate::db::filters::Filters;
 use actix::prelude::*;
-use chrono::{prelude, NaiveDateTime, Utc};
+use chrono::{NaiveDateTime, Utc};
 use diesel::sql_types::*;
 use diesel::{result::QueryResult, sql_query, QueryDsl, RunQueryDsl};
 use failure::Error;
-use serde_json::Value;
 use std::time::Duration;
 
 /// Message to indicate what information is required
@@ -193,6 +192,7 @@ impl DbExecutor {
         }
     }
 
+    /// For front-end tests
     pub fn get_mock_results(&self, max: usize) -> Result<Vec<PeerReputations>, Error> {
         use rand::distributions::Distribution;
         use rand::Rng;
