@@ -20,7 +20,7 @@ use crate::db::{reputation::Query, DbExecutor};
 use actix::prelude::*;
 use actix_web::{HttpRequest, HttpResponse};
 use futures::Future;
-use rand::seq::index::IndexVec::USize;
+//use rand::seq::index::IndexVec::USize;
 
 pub fn configure(cfg: &mut actix_web::web::ServiceConfig) {
     cfg.service(

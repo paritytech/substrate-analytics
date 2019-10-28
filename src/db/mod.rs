@@ -14,7 +14,9 @@
 // You should have received a copy of the GNU General Public License
 // along with Substrate Analytics.  If not, see <http://www.gnu.org/licenses/>.
 
+pub mod benchmarks;
 pub mod filters;
+pub mod host_systems;
 pub mod models;
 pub mod nodes;
 pub mod reputation;

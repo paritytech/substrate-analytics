@@ -24,7 +24,6 @@ use failure::Error;
 use std::time::Duration;
 
 /// Message to indicate what information is required
-/// Response is always json
 pub enum Query {
     All(Filters),
     Logged(Filters),
@@ -223,12 +222,7 @@ impl DbExecutor {
                 }
                 let x = n.sample(&mut r) as i64;
                 let y = r.gen_range(-1_000, 10_000);
-                let rep: i64;
-                if y < 0 {
-                    rep = -(x * y * y);
-                } else {
-                    rep = 0;
-                }
+                let rep = if y < 0 { -(x * y * y) } else { 0 };
                 p.push(peer_id2.to_string());
                 c.push(true);
                 re.push(rep);
