@@ -167,6 +167,7 @@ fn main() {
             .configure(web::reputation::configure)
             .configure(web::stats::configure)
             .configure(web::metrics::configure)
+            .configure(web::pages::configure)
             .configure(web::root::configure)
     })
     .backlog(*MAX_PENDING_CONNECTIONS)
