@@ -34,6 +34,7 @@ pub struct Benchmark {
 #[table_name = "benchmarks"]
 pub struct NewBenchmark {
     pub ts_start: NaiveDateTime,
+    pub ts_end: NaiveDateTime,
     pub description: Option<String>,
     pub chain_spec: Option<Value>,
     pub benchmark_spec: Option<Value>,

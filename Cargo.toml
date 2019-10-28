@@ -1,6 +1,6 @@
 [package]
 name = "substrate-analytics"
-version = "0.1.1"
+version = "0.1.2"
 authors = ["Matt Rutherford <matt@parity.io>"]
 edition = "2018"
 

@@ -87,4 +87,40 @@ To allow logging you must set:
 Log messages are batched together before sending off to DB actor for `INSERT`
 \- up to `DB_BATCH_SIZE` messages or `DB_SAVE_LATENCY_MS`, whichever is reached sooner.
 
----
+#### Benchmarking
+
+Substrate-analytics has endpoints to define benchmarks and host systems (that run the benchmarks). This is 
+designed to be x-referenced with telemetry data to provide insights into the node and system under test.
+
+JSON endpoints:
+
+- **`/host_systems`**
+  - `GET` to list all; `POST` to create new using the format (returns object with newly created `id`):
+```json
+{ 
+   "cpu_clock":2600,
+   "cpu_qty":4,
+   "description":"Any notes to go here",
+   "disk_info":"NVME",
+   "os":"freebsd",
+   "ram_mb":8192
+}
+```
+- **`/benchmarks`**
+  - `GET` to list all, `POST` to create new using the format (returns object with newly created `id`):
+```json
+{ 
+   "benchmark_spec":{ 
+      "tdb":"tbd"
+   },
+   "chain_spec":{ 
+      "name":"Development",
+      "etc": "more chain spec stuff"
+   },
+   "description":"notes",
+   "host_system_id":2,
+   "ts_end":"2019-10-28T14:05:27.618903",
+   "ts_start":"1970-01-01T00:00:01"
+}
+```
+

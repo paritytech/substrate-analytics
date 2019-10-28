@@ -82,6 +82,7 @@ impl NewBenchmark {
     pub fn example() -> Self {
         NewBenchmark {
             ts_start: NaiveDateTime::from_timestamp(1, 0),
+            ts_end: NaiveDateTime::from_timestamp(1, 0),
             description: Some("Any notes to go here".to_owned()),
             chain_spec: Some(json!({"name": "Development"})),
             benchmark_spec: Some(json!({"tdb": "tbd"})),

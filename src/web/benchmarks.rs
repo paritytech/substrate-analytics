@@ -24,9 +24,9 @@ use futures::{Future, IntoFuture};
 pub fn configure(cfg: &mut actix_web::web::ServiceConfig) {
     cfg.service(
         actix_web::web::scope("/benchmarks")
-            .route("/new", actix_web::web::post().to_async(new))
             .route("/example", actix_web::web::get().to_async(example))
-            .route("", actix_web::web::get().to_async(all)),
+            .route("", actix_web::web::get().to_async(all))
+            .route("", actix_web::web::post().to_async(new)),
     );
 }
 
