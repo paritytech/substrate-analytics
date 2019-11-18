@@ -112,6 +112,21 @@ impl NodeSocket {
             ctx.ping("");
         });
     }
+
+    fn update_peer_id(&mut self, peer_id: &str) {
+        debug!("Found peerId: {}, for ip address: {}", &peer_id, &self.ip);
+        self.peer_connection.peer_id = Some(peer_id.to_string());
+        match self.db.send(self.peer_connection.clone()).wait() {
+            Ok(Ok(())) => debug!(
+                "Saved new peer connection record (ID: {:?}) for peer_id: {}",
+                self.peer_connection.id, peer_id
+            ),
+            _ => error!(
+                "Failed to send updated PeerConnection to DB actor for peer_connection_id: {}",
+                self.peer_connection.id
+            ),
+        }
+    }
 }
 
 impl Actor for NodeSocket {
@@ -176,18 +191,12 @@ impl StreamHandler<ws::Message, ws::ProtocolError> for NodeSocket {
             self.metrics.inc_ws_message_count();
             if self.peer_connection.peer_id.is_none() {
                 debug!("Searching for peerId for ip address: {}", &ip);
-                if let Some(peer_id) = logs["network_state"]["peerId"].as_str() {
-                    debug!("Found peerId: {}, for ip address: {}", &peer_id, &ip);
-                    self.peer_connection.peer_id = Some(peer_id.to_string());
-                    match self.db.send(self.peer_connection.clone()).wait() {
-                        Ok(Ok(())) => debug!(
-                            "Saved new peer connection record (ID: {:?}) for peer_id: {}",
-                            self.peer_connection.id, peer_id
-                        ),
-                        _ => error!(
-                            "Failed to send updated PeerConnection to DB actor for peer_connection_id: {}",
-                            self.peer_connection.id),
-                    }
+                if let Some(peer_id) = logs["state"]["peerId"].as_str() {
+                    self.update_peer_id(peer_id)
+                }
+                // Support older versions of substrate
+                else if let Some(peer_id) = logs["network_state"]["peerId"].as_str() {
+                    self.update_peer_id(peer_id)
                 }
             }
             if let Some(ts) = logs["ts"].as_str() {
