@@ -1,12 +1,18 @@
 table! {
+    benchmark_events (id) {
+        id -> Int4,
+        benchmark_id -> Int4,
+        name -> Varchar,
+        phase -> Varchar,
+        created_at -> Timestamp,
+    }
+}
+
+table! {
     benchmarks (id) {
         id -> Int4,
-        ts_start -> Timestamp,
-        ts_end -> Timestamp,
-        description -> Nullable<Varchar>,
-        chain_spec -> Nullable<Jsonb>,
-        benchmark_spec -> Nullable<Jsonb>,
-        host_system_id -> Int4,
+        setup -> Jsonb,
+        created_at -> Timestamp,
     }
 }
 
@@ -41,10 +47,11 @@ table! {
     }
 }
 
-joinable!(benchmarks -> host_systems (host_system_id));
+joinable!(benchmark_events -> benchmarks (benchmark_id));
 joinable!(substrate_logs -> peer_connections (peer_connection_id));
 
 allow_tables_to_appear_in_same_query!(
+    benchmark_events,
     benchmarks,
     host_systems,
     peer_connections,

@@ -169,7 +169,6 @@ fn main() {
             .configure(web::stats::configure)
             .configure(web::metrics::configure)
             .configure(web::benchmarks::configure)
-            .configure(web::host_systems::configure)
             //            .configure(web::pages::configure)
             .configure(web::root::configure)
     })
