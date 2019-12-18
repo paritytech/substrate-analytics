@@ -25,6 +25,7 @@ pub fn configure(cfg: &mut actix_web::web::ServiceConfig) {
     cfg.service(
         actix_web::web::scope("/benchmarks")
             .route("/example", actix_web::web::get().to_async(example))
+            .route("/events", actix_web::web::post().to_async(new_event))
             .route("", actix_web::web::get().to_async(all))
             .route("", actix_web::web::post().to_async(new)),
     );
@@ -50,6 +51,23 @@ fn all(
 
 fn new(
     item: actix_web::web::Json<NewBenchmark>,
+    db: actix_web::web::Data<Addr<DbExecutor>>,
+    metrics: actix_web::web::Data<Metrics>,
+) -> impl Future<Item = HttpResponse, Error = actix_web::Error> {
+    metrics.inc_req_count();
+    db.send(item.into_inner())
+        .from_err()
+        .and_then(move |res| match res {
+            Ok(r) => Ok(HttpResponse::Ok().json(json!(r))),
+            Err(e) => {
+                error!("Could not create New Benchmark: {:?}", e);
+                Ok(HttpResponse::InternalServerError().json(json!({"error": e.to_string()})))
+            }
+        })
+}
+
+fn new_event(
+    item: actix_web::web::Json<NewBenchmarkEvent>,
     db: actix_web::web::Data<Addr<DbExecutor>>,
     metrics: actix_web::web::Data<Metrics>,
 ) -> impl Future<Item = HttpResponse, Error = actix_web::Error> {

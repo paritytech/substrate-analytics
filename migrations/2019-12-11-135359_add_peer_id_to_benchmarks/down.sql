@@ -1,0 +1,1 @@
+ALTER TABLE benchmarks DROP COLUMN peer_id;

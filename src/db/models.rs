@@ -14,56 +14,40 @@
 // You should have received a copy of the GNU General Public License
 // along with Substrate Analytics.  If not, see <http://www.gnu.org/licenses/>.
 
-use crate::schema::{benchmarks, host_systems, peer_connections, substrate_logs};
+use crate::schema::{benchmark_events, benchmarks, peer_connections, substrate_logs};
 use chrono::NaiveDateTime;
 use serde_json::Value;
+
+#[derive(Queryable, Identifiable, PartialEq, Serialize, Debug)]
+#[table_name = "benchmark_events"]
+pub struct BenchmarkEvent {
+    pub id: i32,
+    pub benchmark_id: i32,
+    pub name: String,
+    pub phase: String,
+    pub created_at: NaiveDateTime,
+}
+
+#[derive(Insertable, Debug, Serialize, Deserialize)]
+#[table_name = "benchmark_events"]
+pub struct NewBenchmarkEvent {
+    pub benchmark_id: i32,
+    pub name: String,
+    pub phase: String,
+}
 
 #[derive(Queryable, Identifiable, PartialEq, Serialize, Debug)]
 #[table_name = "benchmarks"]
 pub struct Benchmark {
     pub id: i32,
-    pub ts_start: NaiveDateTime,
-    pub ts_end: NaiveDateTime,
-    pub description: Option<String>,
-    pub chain_spec: Option<Value>,
-    pub benchmark_spec: Option<Value>,
-    pub host_system_id: i32,
+    pub setup: Value,
+    pub created_at: NaiveDateTime,
 }
 
 #[derive(Insertable, Debug, Serialize, Deserialize)]
 #[table_name = "benchmarks"]
 pub struct NewBenchmark {
-    pub ts_start: NaiveDateTime,
-    pub ts_end: NaiveDateTime,
-    pub description: Option<String>,
-    pub chain_spec: Option<Value>,
-    pub benchmark_spec: Option<Value>,
-    pub host_system_id: i32,
-}
-
-#[derive(Insertable, Debug, Serialize, Deserialize)]
-#[table_name = "host_systems"]
-pub struct NewHostSystem {
-    pub description: String,
-    pub os: String,
-    pub cpu_qty: i32,
-    pub cpu_clock: i32,
-    pub ram_mb: i32,
-    pub disk_info: String,
-}
-
-/// HostSystem is a way to indentify the hardware that the node
-/// is running on.
-#[derive(Queryable, Identifiable, PartialEq, Serialize, Debug)]
-#[table_name = "host_systems"]
-pub struct HostSystem {
-    pub id: i32,
-    pub description: String,
-    pub os: String,
-    pub cpu_qty: i32,
-    pub cpu_clock: i32,
-    pub ram_mb: i32,
-    pub disk_info: String,
+    pub setup: Value,
 }
 
 #[derive(Queryable, QueryableByName, Identifiable, Serialize, PartialEq, Clone, Debug)]

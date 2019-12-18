@@ -14,7 +14,7 @@
 // You should have received a copy of the GNU General Public License
 // along with Substrate Analytics.  If not, see <http://www.gnu.org/licenses/>.
 
-use super::models::{Benchmark, NewBenchmark};
+use super::models::{Benchmark, BenchmarkEvent, NewBenchmark, NewBenchmarkEvent};
 use super::DbExecutor;
 use crate::db::filters::Filters;
 use actix::prelude::*;
@@ -52,6 +52,18 @@ impl Handler<NewBenchmark> for DbExecutor {
     }
 }
 
+impl Message for NewBenchmarkEvent {
+    type Result = Result<BenchmarkEvent, Error>;
+}
+
+impl Handler<NewBenchmarkEvent> for DbExecutor {
+    type Result = Result<BenchmarkEvent, Error>;
+
+    fn handle(&mut self, msg: NewBenchmarkEvent, _: &mut Self::Context) -> Self::Result {
+        self.save_benchmark_event(msg)
+    }
+}
+
 impl DbExecutor {
     fn get_benchmarks(&self, _filters: Filters) -> Result<Vec<Benchmark>, Error> {
         match self.with_connection(|conn| {
@@ -76,17 +88,25 @@ impl DbExecutor {
             Err(e) => Err(e.into()),
         }
     }
+
+    fn save_benchmark_event(&self, msg: NewBenchmarkEvent) -> Result<BenchmarkEvent, Error> {
+        match self.with_connection(|conn| {
+            use crate::schema::benchmark_events;
+            diesel::insert_into(benchmark_events::table)
+                .values(msg)
+                .get_result(conn)
+        }) {
+            Ok(Ok(v)) => Ok(v),
+            Ok(Err(e)) => Err(e.into()),
+            Err(e) => Err(e.into()),
+        }
+    }
 }
 
 impl NewBenchmark {
     pub fn example() -> Self {
         NewBenchmark {
-            ts_start: NaiveDateTime::from_timestamp(1, 0),
-            ts_end: NaiveDateTime::from_timestamp(1, 0),
-            description: Some("Any notes to go here".to_owned()),
-            chain_spec: Some(json!({"name": "Development"})),
-            benchmark_spec: Some(json!({"tdb": "tbd"})),
-            host_system_id: 1,
+            setup: serde_json::Value::default(),
         }
     }
 }

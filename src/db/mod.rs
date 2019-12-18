@@ -16,7 +16,6 @@
 
 pub mod benchmarks;
 pub mod filters;
-pub mod host_systems;
 pub mod models;
 pub mod nodes;
 pub mod reputation;
