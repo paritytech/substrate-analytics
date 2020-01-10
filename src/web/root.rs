@@ -66,7 +66,7 @@ impl Drop for NodeSocket {
 }
 
 impl NodeSocket {
-    fn new(
+    async fn new(
         ip: String,
         db: actix_web::web::Data<Addr<DbExecutor>>,
         log_buffer: actix_web::web::Data<Addr<LogBuffer>>,
@@ -74,7 +74,7 @@ impl NodeSocket {
         audit: bool,
     ) -> Result<Self, String> {
         Ok(Self {
-            peer_connection: Self::create_peer_connection(&db, &ip, audit)?,
+            peer_connection: Self::create_peer_connection(&db, &ip, audit).await?,
             ip,
             db,
             log_buffer,
@@ -84,21 +84,25 @@ impl NodeSocket {
         })
     }
 
-    fn create_peer_connection(
+    async fn create_peer_connection(
         db: &actix_web::web::Data<Addr<DbExecutor>>,
         ip: &str,
         audit: bool,
     ) -> Result<PeerConnection, String> {
-        db.send(NewPeerConnection {
-            ip_addr: String::from(ip), //
-            peer_id: None,
-            audit,
-        })
-        .wait()
-        .unwrap_or_else(|e| {
-            error!("Failed to send NewPeerConnection to DB actor - {:?}", e);
-            Err("Failed to send".to_string())
-        })
+        let res = db
+            .send(NewPeerConnection {
+                ip_addr: String::from(ip), //
+                peer_id: None,
+                audit,
+            })
+            .await;
+        match res {
+            Ok(v) => v,
+            Err(e) => {
+                error!("Failed to send NewPeerConnection to DB actor - {:?}", e);
+                Err("Failed to send".to_string())
+            }
+        }
     }
 
     fn hb(&self, ctx: &mut <Self as Actor>::Context) {
@@ -109,15 +113,15 @@ impl NodeSocket {
                 ctx.stop();
                 return;
             }
-            ctx.ping("");
+            ctx.ping(&[]);
         });
     }
 
     fn update_peer_id(&mut self, peer_id: &str) {
         debug!("Found peerId: {}, for ip address: {}", &peer_id, &self.ip);
         self.peer_connection.peer_id = Some(peer_id.to_string());
-        match self.db.send(self.peer_connection.clone()).wait() {
-            Ok(Ok(())) => debug!(
+        match self.db.try_send(self.peer_connection.clone()) {
+            Ok(_) => debug!(
                 "Saved new peer connection record (ID: {:?}) for peer_id: {}",
                 self.peer_connection.id, peer_id
             ),
@@ -139,23 +143,23 @@ impl Actor for NodeSocket {
 }
 
 // Handler for ws::Message
-impl StreamHandler<ws::Message, ws::ProtocolError> for NodeSocket {
-    fn handle(&mut self, msg: ws::Message, ctx: &mut Self::Context) {
+impl StreamHandler<Result<ws::Message, ws::ProtocolError>> for NodeSocket {
+    fn handle(&mut self, msg: Result<ws::Message, ws::ProtocolError>, ctx: &mut Self::Context) {
         let ip = self.ip.clone();
         let mut logs: Option<Value> = None;
         match msg {
-            ws::Message::Ping(msg) => {
+            Ok(ws::Message::Ping(msg)) => {
                 self.msg_count.ping += 1;
                 debug!("PING from: {}", ip);
                 self.hb = Instant::now();
                 ctx.pong(&msg);
             }
-            ws::Message::Pong(_) => {
+            Ok(ws::Message::Pong(_)) => {
                 self.msg_count.pong += 1;
                 debug!("PONG from: {} - message count: ({})", ip, self.msg_count);
                 self.hb = Instant::now();
             }
-            ws::Message::Text(text) => {
+            Ok(ws::Message::Text(text)) => {
                 self.metrics
                     .inc_ws_bytes_received(text.as_bytes().len() as u64);
                 self.msg_count.text += 1;
@@ -167,7 +171,7 @@ impl StreamHandler<ws::Message, ws::ProtocolError> for NodeSocket {
                     }
                 };
             }
-            ws::Message::Binary(bin) => {
+            Ok(ws::Message::Binary(bin)) => {
                 self.metrics.inc_ws_bytes_received(bin.len() as u64);
                 self.msg_count.binary += 1;
                 logs = match serde_json::from_slice(&bin[..]) {
@@ -178,25 +182,26 @@ impl StreamHandler<ws::Message, ws::ProtocolError> for NodeSocket {
                     }
                 };
             }
-            ws::Message::Close(_) => {
+            Ok(ws::Message::Close(_)) => {
                 info!(
                     "Close received, disconnecting: {} - message count: ({})",
                     ip, self.msg_count
                 );
                 ctx.stop();
             }
-            ws::Message::Nop => (),
+            //            ws::Message::Nop => (),
+            _ => ctx.stop(),
         }
         if let Some(logs) = logs {
             self.metrics.inc_ws_message_count();
             if self.peer_connection.peer_id.is_none() {
                 debug!("Searching for peerId for ip address: {}", &ip);
                 if let Some(peer_id) = logs["state"]["peerId"].as_str() {
-                    self.update_peer_id(peer_id)
+                    self.update_peer_id(peer_id);
                 }
                 // Support older versions of substrate
                 else if let Some(peer_id) = logs["network_state"]["peerId"].as_str() {
-                    self.update_peer_id(peer_id)
+                    self.update_peer_id(peer_id);
                 }
             }
             if let Some(ts) = logs["ts"].as_str() {
@@ -223,34 +228,34 @@ impl StreamHandler<ws::Message, ws::ProtocolError> for NodeSocket {
 pub fn configure(cfg: &mut actix_web::web::ServiceConfig) {
     cfg.service(
         actix_web::web::scope("/")
-            .route("audit", actix_web::web::get().to_async(ws_index_permanent))
-            .route("", actix_web::web::get().to_async(ws_index)),
+            .route("audit", actix_web::web::get().to(ws_index_permanent))
+            .route("", actix_web::web::get().to(ws_index)),
     );
 }
 
 // Websocket handshake and start actor
-fn ws_index(
+async fn ws_index(
     r: HttpRequest,
     stream: actix_web::web::Payload,
     db: actix_web::web::Data<Addr<DbExecutor>>,
     log_buffer: actix_web::web::Data<Addr<LogBuffer>>,
     metrics: actix_web::web::Data<Metrics>,
 ) -> Result<HttpResponse, Error> {
-    establish_connection(r, stream, db, log_buffer, metrics, false)
+    establish_connection(r, stream, db, log_buffer, metrics, false).await
 }
 
 // Websocket handshake and start actor
-fn ws_index_permanent(
+async fn ws_index_permanent(
     r: HttpRequest,
     stream: actix_web::web::Payload,
     db: actix_web::web::Data<Addr<DbExecutor>>,
     log_buffer: actix_web::web::Data<Addr<LogBuffer>>,
     metrics: actix_web::web::Data<Metrics>,
 ) -> Result<HttpResponse, Error> {
-    establish_connection(r, stream, db, log_buffer, metrics, true)
+    establish_connection(r, stream, db, log_buffer, metrics, true).await
 }
 
-fn establish_connection(
+async fn establish_connection(
     r: HttpRequest,
     stream: actix_web::web::Payload,
     db: actix_web::web::Data<Addr<DbExecutor>>,
@@ -265,7 +270,7 @@ fn establish_connection(
         .to_string();
     debug_headers(&r);
     info!("Establishing ws connection to node: {}", ip);
-    match NodeSocket::new(ip.clone(), db, log_buffer, metrics.clone(), audit) {
+    match NodeSocket::new(ip.clone(), db, log_buffer, metrics.clone(), audit).await {
         Ok(ns) => {
             metrics.inc_ws_connected_count();
             debug!(

@@ -19,75 +19,67 @@ use super::metrics::Metrics;
 use crate::db::{benchmarks::*, models::*, DbExecutor};
 use actix::prelude::*;
 use actix_web::{HttpRequest, HttpResponse};
-use futures::{Future, IntoFuture};
 
 pub fn configure(cfg: &mut actix_web::web::ServiceConfig) {
     cfg.service(
         actix_web::web::scope("/benchmarks")
-            .route("/example", actix_web::web::get().to_async(example))
-            .route("/events", actix_web::web::post().to_async(new_event))
-            .route("", actix_web::web::get().to_async(all))
-            .route("", actix_web::web::post().to_async(new)),
+            .route("/example", actix_web::web::get().to(example))
+            .route("/events", actix_web::web::post().to(new_event))
+            .route("", actix_web::web::get().to(all))
+            .route("", actix_web::web::post().to(new)),
     );
 }
 
-fn all(
+async fn all(
     req: HttpRequest,
     db: actix_web::web::Data<Addr<DbExecutor>>,
     metrics: actix_web::web::Data<Metrics>,
-) -> impl Future<Item = HttpResponse, Error = actix_web::Error> {
+) -> Result<HttpResponse, actix_web::Error> {
     metrics.inc_req_count();
     let filters = get_filters(&req);
-    db.send(Query::All(filters))
-        .from_err()
-        .and_then(move |res| match res {
-            Ok(r) => Ok(HttpResponse::Ok().json(json!(r))),
-            Err(e) => {
-                error!("Could not complete benchmarks query: {:?}", e);
-                Ok(HttpResponse::InternalServerError().json(json!("Error while processing query")))
-            }
-        })
+    let res = db.send(Query::All(filters)).await?;
+    match res {
+        Ok(r) => Ok(HttpResponse::Ok().json(json!(r))),
+        Err(e) => {
+            error!("Could not complete benchmarks query: {:?}", e);
+            Ok(HttpResponse::InternalServerError().json(json!("Error while processing query")))
+        }
+    }
 }
 
-fn new(
+async fn new(
     item: actix_web::web::Json<NewBenchmark>,
     db: actix_web::web::Data<Addr<DbExecutor>>,
     metrics: actix_web::web::Data<Metrics>,
-) -> impl Future<Item = HttpResponse, Error = actix_web::Error> {
+) -> Result<HttpResponse, actix_web::Error> {
     metrics.inc_req_count();
-    db.send(item.into_inner())
-        .from_err()
-        .and_then(move |res| match res {
-            Ok(r) => Ok(HttpResponse::Ok().json(json!(r))),
-            Err(e) => {
-                error!("Could not create New Benchmark: {:?}", e);
-                Ok(HttpResponse::InternalServerError().json(json!({"error": e.to_string()})))
-            }
-        })
+    let res = db.send(item.into_inner()).await?;
+    match res {
+        Ok(r) => Ok(HttpResponse::Ok().json(json!(r))),
+        Err(e) => {
+            error!("Could not create New Benchmark: {:?}", e);
+            Ok(HttpResponse::InternalServerError().json(json!({"error": e.to_string()})))
+        }
+    }
 }
 
-fn new_event(
+async fn new_event(
     item: actix_web::web::Json<NewBenchmarkEvent>,
     db: actix_web::web::Data<Addr<DbExecutor>>,
     metrics: actix_web::web::Data<Metrics>,
-) -> impl Future<Item = HttpResponse, Error = actix_web::Error> {
+) -> Result<HttpResponse, actix_web::Error> {
     metrics.inc_req_count();
-    db.send(item.into_inner())
-        .from_err()
-        .and_then(move |res| match res {
-            Ok(r) => Ok(HttpResponse::Ok().json(json!(r))),
-            Err(e) => {
-                error!("Could not create New Benchmark: {:?}", e);
-                Ok(HttpResponse::InternalServerError().json(json!({"error": e.to_string()})))
-            }
-        })
+    let res = db.send(item.into_inner()).await?;
+    match res {
+        Ok(r) => Ok(HttpResponse::Ok().json(json!(r))),
+        Err(e) => {
+            error!("Could not create New Benchmark: {:?}", e);
+            Ok(HttpResponse::InternalServerError().json(json!({"error": e.to_string()})))
+        }
+    }
 }
 
-fn example(
-    metrics: actix_web::web::Data<Metrics>,
-) -> impl Future<Item = HttpResponse, Error = actix_web::Error> {
+async fn example(metrics: actix_web::web::Data<Metrics>) -> Result<HttpResponse, actix_web::Error> {
     metrics.inc_req_count();
-    actix_web::web::HttpResponse::Ok()
-        .json(NewBenchmark::example())
-        .into_future()
+    Ok(actix_web::web::HttpResponse::Ok().finish())
 }

@@ -119,12 +119,13 @@ impl Handler<SaveLogs> for LogBuffer {
     }
 }
 
-fn main() {
+#[actix_rt::main]
+async fn main() -> std::io::Result<()> {
     dotenv().ok();
     env_logger::init();
     log_statics();
     info!("Starting Substrate SAVE");
-    let sys = actix::System::new("substrate-analytics");
+    //    let sys = actix::System::new("substrate-analytics");
     info!("Creating database pool");
     let pool = create_pool();
     info!("Starting DbArbiter with {} threads", *NUM_THREADS);
@@ -173,12 +174,9 @@ fn main() {
             .configure(web::root::configure)
     })
     .backlog(*MAX_PENDING_CONNECTIONS)
-    .bind(&address)
-    .unwrap()
-    .start();
-
-    info!("Server started");
-    let _ = sys.run();
+    .bind(&address)?
+    .run()
+    .await
 }
 
 // Private

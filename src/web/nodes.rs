@@ -20,41 +20,34 @@ use crate::db::nodes::{NodeQueryType, NodesQuery};
 use crate::db::*;
 use actix::prelude::*;
 use actix_web::{HttpRequest, HttpResponse};
-use futures::Future;
 
 pub fn configure(cfg: &mut actix_web::web::ServiceConfig) {
     cfg.service(
         actix_web::web::scope("/nodes")
             .route(
                 "/{peer_id}/peer_counts",
-                actix_web::web::get().to_async(peer_counts),
+                actix_web::web::get().to(peer_counts),
             )
-            .route(
-                "/{peer_id}/logs/{msg_type}",
-                actix_web::web::get().to_async(logs),
-            )
-            .route("/{peer_id}/logs", actix_web::web::get().to_async(all_logs))
-            .route(
-                "/{peer_id}/log_stats",
-                actix_web::web::get().to_async(log_stats),
-            )
-            .route("", actix_web::web::get().to_async(all_nodes)),
+            .route("/{peer_id}/logs/{msg_type}", actix_web::web::get().to(logs))
+            .route("/{peer_id}/logs", actix_web::web::get().to(all_logs))
+            .route("/{peer_id}/log_stats", actix_web::web::get().to(log_stats))
+            .route("", actix_web::web::get().to(all_nodes)),
     );
 }
 
-fn all_nodes(
+async fn all_nodes(
     db: actix_web::web::Data<Addr<DbExecutor>>,
     metrics: actix_web::web::Data<Metrics>,
-) -> impl Future<Item = HttpResponse, Error = actix_web::Error> {
+) -> Result<HttpResponse, actix_web::Error> {
     metrics.inc_req_count();
-    send_query(NodesQuery::AllNodes, db)
+    send_query(NodesQuery::AllNodes, db).await
 }
 
-fn log_stats(
+async fn log_stats(
     req: HttpRequest,
     db: actix_web::web::Data<Addr<DbExecutor>>,
     metrics: actix_web::web::Data<Metrics>,
-) -> impl Future<Item = HttpResponse, Error = actix_web::Error> {
+) -> Result<HttpResponse, actix_web::Error> {
     metrics.inc_req_count();
     let peer_id = req
         .match_info()
@@ -70,13 +63,14 @@ fn log_stats(
         },
         db,
     )
+    .await
 }
 
-fn peer_counts(
+async fn peer_counts(
     req: HttpRequest,
     db: actix_web::web::Data<Addr<DbExecutor>>,
     metrics: actix_web::web::Data<Metrics>,
-) -> impl Future<Item = HttpResponse, Error = actix_web::Error> {
+) -> Result<HttpResponse, actix_web::Error> {
     metrics.inc_req_count();
     let peer_id = req
         .match_info()
@@ -92,13 +86,14 @@ fn peer_counts(
         },
         db,
     )
+    .await
 }
 
-fn all_logs(
+async fn all_logs(
     req: HttpRequest,
     db: actix_web::web::Data<Addr<DbExecutor>>,
     metrics: actix_web::web::Data<Metrics>,
-) -> impl Future<Item = HttpResponse, Error = actix_web::Error> {
+) -> Result<HttpResponse, actix_web::Error> {
     metrics.inc_req_count();
     let peer_id = req
         .match_info()
@@ -114,13 +109,14 @@ fn all_logs(
         },
         db,
     )
+    .await
 }
 
-fn logs(
+async fn logs(
     req: HttpRequest,
     db: actix_web::web::Data<Addr<DbExecutor>>,
     metrics: actix_web::web::Data<Metrics>,
-) -> impl Future<Item = HttpResponse, Error = actix_web::Error> {
+) -> Result<HttpResponse, actix_web::Error> {
     metrics.inc_req_count();
     let peer_id = req
         .match_info()
@@ -141,17 +137,19 @@ fn logs(
         },
         db,
     )
+    .await
 }
 
-fn send_query(
+async fn send_query(
     query: NodesQuery,
     db: actix_web::web::Data<Addr<DbExecutor>>,
-) -> impl Future<Item = HttpResponse, Error = actix_web::Error> {
-    db.send(query).from_err().and_then(move |res| match res {
+) -> Result<HttpResponse, actix_web::Error> {
+    let res = db.send(query).await?;
+    match res {
         Ok(r) => Ok(HttpResponse::Ok().json(r)),
         Err(e) => {
             error!("Could not complete query: {}", e);
             Ok(HttpResponse::InternalServerError().json(json!("Error while processing query")))
         }
-    })
+    }
 }

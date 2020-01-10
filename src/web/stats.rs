@@ -18,7 +18,6 @@ use super::metrics::Metrics;
 use crate::db::{stats::Query, DbExecutor};
 use actix::prelude::*;
 use actix_web::{http::StatusCode, HttpResponse, Result as AWResult};
-use futures::Future;
 
 lazy_static! {
     static ref VERSION_INFO: String = format!(
@@ -32,28 +31,27 @@ lazy_static! {
 pub fn configure(cfg: &mut actix_web::web::ServiceConfig) {
     cfg.service(
         actix_web::web::scope("/stats")
-            .route("/db", actix_web::web::get().to_async(send_query))
+            .route("/db", actix_web::web::get().to(send_query))
             .route("/version", actix_web::web::get().to(version)),
     );
 }
 
-fn send_query(
+async fn send_query(
     db: actix_web::web::Data<Addr<DbExecutor>>,
     metrics: actix_web::web::Data<Metrics>,
-) -> impl Future<Item = HttpResponse, Error = actix_web::Error> {
+) -> Result<HttpResponse, actix_web::Error> {
     metrics.inc_req_count();
-    db.send(Query::Db)
-        .from_err()
-        .and_then(move |res| match res {
-            Ok(r) => Ok(HttpResponse::Ok().json(r)),
-            Err(e) => {
-                error!("Could not complete stats query: {}", e);
-                Ok(HttpResponse::InternalServerError().json(json!("Error while processing query")))
-            }
-        })
+    let res = db.send(Query::Db).await?;
+    match res {
+        Ok(r) => Ok(HttpResponse::Ok().json(r)),
+        Err(e) => {
+            error!("Could not complete stats query: {}", e);
+            Ok(HttpResponse::InternalServerError().json(json!("Error while processing query")))
+        }
+    }
 }
 
-fn version(metrics: actix_web::web::Data<Metrics>) -> AWResult<HttpResponse> {
+async fn version(metrics: actix_web::web::Data<Metrics>) -> AWResult<HttpResponse> {
     metrics.inc_req_count();
     Ok(HttpResponse::build(StatusCode::OK)
         .content_type("text/html; charset=utf-8")
