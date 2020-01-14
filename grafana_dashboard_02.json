@@ -1,0 +1,308 @@
+{
+  "annotations": {
+    "list": [
+      {
+        "builtIn": 1,
+        "datasource": "-- Grafana --",
+        "enable": true,
+        "hide": true,
+        "iconColor": "rgba(0, 211, 255, 1)",
+        "name": "Annotations & Alerts",
+        "type": "dashboard"
+      }
+    ]
+  },
+  "editable": true,
+  "gnetId": null,
+  "graphTooltip": 0,
+  "id": 1,
+  "iteration": 1579014779384,
+  "links": [],
+  "panels": [
+    {
+      "aliasColors": {},
+      "bars": false,
+      "cacheTimeout": null,
+      "dashLength": 10,
+      "dashes": false,
+      "datasource": null,
+      "decimals": null,
+      "fill": 2,
+      "fillGradient": 0,
+      "gridPos": {
+        "h": 16,
+        "w": 24,
+        "x": 0,
+        "y": 0
+      },
+      "hiddenSeries": false,
+      "id": 2,
+      "legend": {
+        "avg": true,
+        "current": false,
+        "max": true,
+        "min": true,
+        "show": true,
+        "total": true,
+        "values": true
+      },
+      "lines": true,
+      "linewidth": 1,
+      "links": [],
+      "nullPointMode": "null",
+      "options": {
+        "dataLinks": []
+      },
+      "percentage": false,
+      "pointradius": 2,
+      "points": false,
+      "renderer": "flot",
+      "seriesOverrides": [],
+      "spaceLength": 10,
+      "stack": false,
+      "steppedLine": false,
+      "targets": [
+        {
+          "format": "time_series",
+          "group": [],
+          "metricColumn": "none",
+          "rawQuery": true,
+          "rawSql": "SELECT\n  created_at AS \"time\",\n  cast(logs->>'time' as decimal) / 1000 as \"execution time\"\nFROM substrate_logs\nWHERE\n  $__timeFilter(created_at) AND logs->>'target' = '$target' AND logs->>'name' = '$span'\nORDER BY 1",
+          "refId": "A",
+          "select": [
+            [
+              {
+                "params": [
+                  "id"
+                ],
+                "type": "column"
+              }
+            ]
+          ],
+          "table": "substrate_logs",
+          "timeColumn": "created_at",
+          "timeColumnType": "timestamp",
+          "where": [
+            {
+              "name": "$__timeFilter",
+              "params": [],
+              "type": "macro"
+            }
+          ]
+        }
+      ],
+      "thresholds": [],
+      "timeFrom": null,
+      "timeRegions": [],
+      "timeShift": null,
+      "title": "$target - $span",
+      "tooltip": {
+        "shared": true,
+        "sort": 0,
+        "value_type": "individual"
+      },
+      "transparent": true,
+      "type": "graph",
+      "xaxis": {
+        "buckets": null,
+        "mode": "time",
+        "name": null,
+        "show": true,
+        "values": []
+      },
+      "yaxes": [
+        {
+          "format": "µs",
+          "label": "",
+          "logBase": 1,
+          "max": null,
+          "min": null,
+          "show": true
+        },
+        {
+          "format": "short",
+          "label": "Time",
+          "logBase": 1,
+          "max": null,
+          "min": null,
+          "show": true
+        }
+      ],
+      "yaxis": {
+        "align": false,
+        "alignLevel": null
+      }
+    }
+  ],
+  "schemaVersion": 21,
+  "style": "dark",
+  "tags": [],
+  "templating": {
+    "list": [
+      {
+        "allValue": null,
+        "current": {
+          "tags": [],
+          "text": "polkadot_runtime_common::slots",
+          "value": "polkadot_runtime_common::slots"
+        },
+        "datasource": "PostgreSQL",
+        "definition": "select DISTINCT logs->>'target' from substrate_logs where logs->>'msg' = 'tracing.profiling';",
+        "hide": 0,
+        "includeAll": false,
+        "label": "target",
+        "multi": false,
+        "name": "target",
+        "options": [
+          {
+            "selected": false,
+            "text": "pallet_authorship",
+            "value": "pallet_authorship"
+          },
+          {
+            "selected": false,
+            "text": "pallet_babe",
+            "value": "pallet_babe"
+          },
+          {
+            "selected": false,
+            "text": "pallet_balances",
+            "value": "pallet_balances"
+          },
+          {
+            "selected": false,
+            "text": "pallet_democracy",
+            "value": "pallet_democracy"
+          },
+          {
+            "selected": false,
+            "text": "pallet_elections_phragmen",
+            "value": "pallet_elections_phragmen"
+          },
+          {
+            "selected": false,
+            "text": "pallet_finality_tracker",
+            "value": "pallet_finality_tracker"
+          },
+          {
+            "selected": false,
+            "text": "pallet_grandpa",
+            "value": "pallet_grandpa"
+          },
+          {
+            "selected": false,
+            "text": "pallet_identity",
+            "value": "pallet_identity"
+          },
+          {
+            "selected": false,
+            "text": "pallet_randomness_collective_flip",
+            "value": "pallet_randomness_collective_flip"
+          },
+          {
+            "selected": false,
+            "text": "pallet_session",
+            "value": "pallet_session"
+          },
+          {
+            "selected": false,
+            "text": "pallet_staking",
+            "value": "pallet_staking"
+          },
+          {
+            "selected": false,
+            "text": "pallet_timestamp",
+            "value": "pallet_timestamp"
+          },
+          {
+            "selected": false,
+            "text": "pallet_transaction_payment",
+            "value": "pallet_transaction_payment"
+          },
+          {
+            "selected": false,
+            "text": "pallet_treasury",
+            "value": "pallet_treasury"
+          },
+          {
+            "selected": false,
+            "text": "polkadot_runtime_common::attestations",
+            "value": "polkadot_runtime_common::attestations"
+          },
+          {
+            "selected": false,
+            "text": "polkadot_runtime_common::parachains",
+            "value": "polkadot_runtime_common::parachains"
+          },
+          {
+            "selected": false,
+            "text": "polkadot_runtime_common::registrar",
+            "value": "polkadot_runtime_common::registrar"
+          },
+          {
+            "selected": true,
+            "text": "polkadot_runtime_common::slots",
+            "value": "polkadot_runtime_common::slots"
+          }
+        ],
+        "query": "select DISTINCT logs->>'target' from substrate_logs where logs->>'msg' = 'tracing.profiling';",
+        "refresh": 0,
+        "regex": "",
+        "skipUrlSync": false,
+        "sort": 1,
+        "tagValuesQuery": "",
+        "tags": [],
+        "tagsQuery": "",
+        "type": "query",
+        "useTags": false
+      },
+      {
+        "allValue": null,
+        "current": {
+          "text": "on_finalize",
+          "value": "on_finalize"
+        },
+        "datasource": "PostgreSQL",
+        "definition": "select DISTINCT logs->>'name' from substrate_logs where logs->>'msg' = 'tracing.profiling' and logs->>'target' = '$target';",
+        "hide": 0,
+        "includeAll": false,
+        "label": null,
+        "multi": false,
+        "name": "span",
+        "options": [],
+        "query": "select DISTINCT logs->>'name' from substrate_logs where logs->>'msg' = 'tracing.profiling' and logs->>'target' = '$target';",
+        "refresh": 1,
+        "regex": "",
+        "skipUrlSync": false,
+        "sort": 0,
+        "tagValuesQuery": "",
+        "tags": [],
+        "tagsQuery": "",
+        "type": "query",
+        "useTags": false
+      }
+    ]
+  },
+  "time": {
+    "from": "now-5m",
+    "to": "now"
+  },
+  "timepicker": {
+    "refresh_intervals": [
+      "5s",
+      "10s",
+      "30s",
+      "1m",
+      "5m",
+      "15m",
+      "30m",
+      "1h",
+      "2h",
+      "1d"
+    ]
+  },
+  "timezone": "",
+  "title": "Runtime",
+  "uid": "zj7vkLEWk",
+  "version": 6
+}
