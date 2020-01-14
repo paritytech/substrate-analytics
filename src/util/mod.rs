@@ -23,7 +23,7 @@ pub struct PeriodicAction<M: Message<Result = Result<(), &'static str>> + Send> 
     pub recipient: Recipient<M>,
 }
 
-impl<M: Message<Result = Result<(), &'static str>> + Clone + Send + 'static> Actor
+impl<M: Message<Result = Result<(), &'static str>> + Clone + Send + 'static + Unpin> Actor
     for PeriodicAction<M>
 {
     type Context = Context<Self>;

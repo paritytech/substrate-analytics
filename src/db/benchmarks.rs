@@ -18,7 +18,6 @@ use super::models::{Benchmark, BenchmarkEvent, NewBenchmark, NewBenchmarkEvent};
 use super::DbExecutor;
 use crate::db::filters::Filters;
 use actix::prelude::*;
-use chrono::NaiveDateTime;
 use diesel::RunQueryDsl;
 use failure::Error;
 

@@ -98,7 +98,7 @@ pub fn configure(cfg: &mut actix_web::web::ServiceConfig) {
     cfg.service(actix_web::web::scope("/metrics").route("", actix_web::web::get().to(root)));
 }
 
-fn root(
+async fn root(
     _r: HttpRequest,
     metrics: actix_web::web::Data<Metrics>,
 ) -> AWResult<HttpResponse, actix_web::Error> {
