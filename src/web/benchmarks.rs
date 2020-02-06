@@ -25,6 +25,8 @@ pub fn configure(cfg: &mut actix_web::web::ServiceConfig) {
         actix_web::web::scope("/benchmarks")
             .route("/example", actix_web::web::get().to(example))
             .route("/events", actix_web::web::post().to(new_event))
+            .route("/{benchmark_id}/targets", actix_web::web::get().to(targets))
+            .route("/{benchmark_id}/events", actix_web::web::get().to(events))
             .route("", actix_web::web::get().to(all))
             .route("", actix_web::web::post().to(new)),
     );
@@ -39,13 +41,84 @@ async fn all(
     let filters = get_filters(&req);
     let res = db.send(Query::All(filters)).await?;
     match res {
-        Ok(r) => Ok(HttpResponse::Ok().json(json!(r))),
+        Ok(r) => Ok(HttpResponse::Ok().json(r)),
         Err(e) => {
             error!("Could not complete benchmarks query: {:?}", e);
             Ok(HttpResponse::InternalServerError().json(json!("Error while processing query")))
         }
     }
 }
+
+async fn targets(
+    req: HttpRequest,
+    db: actix_web::web::Data<Addr<DbExecutor>>,
+    metrics: actix_web::web::Data<Metrics>,
+) -> Result<HttpResponse, actix_web::Error> {
+    metrics.inc_req_count();
+    let benchmark_id: i32 = req
+        .match_info()
+        .get("benchmark_id")
+        .expect("benchmark_id should be available because the route matched")
+        .to_string()
+        .parse()
+        .unwrap_or(0);
+    let res = db.send(Query::Targets(benchmark_id)).await?;
+    match res {
+        Ok(r) => Ok(HttpResponse::Ok().json(r)),
+        Err(e) => {
+            error!("Could not complete benchmarks query: {:?}", e);
+            Ok(HttpResponse::InternalServerError().json(json!("Error while processing query")))
+        }
+    }
+}
+
+async fn events(
+    req: HttpRequest,
+    db: actix_web::web::Data<Addr<DbExecutor>>,
+    metrics: actix_web::web::Data<Metrics>,
+) -> Result<HttpResponse, actix_web::Error> {
+    metrics.inc_req_count();
+    let benchmark_id: i32 = req
+        .match_info()
+        .get("benchmark_id")
+        .expect("benchmark_id should be available because the route matched")
+        .to_string()
+        .parse()
+        .unwrap_or(0);
+    let res = db.send(Query::Events(benchmark_id)).await?;
+    match res {
+        Ok(r) => Ok(HttpResponse::Ok().json(r)),
+        Err(e) => {
+            error!("Could not complete benchmarks query: {:?}", e);
+            Ok(HttpResponse::InternalServerError().json(json!("Error while processing query")))
+        }
+    }
+}
+
+// TODO move to generic Profiling module
+//async fn timings(
+//    req: HttpRequest,
+//    db: actix_web::web::Data<Addr<DbExecutor>>,
+//    metrics: actix_web::web::Data<Metrics>,
+//) -> Result<HttpResponse, actix_web::Error> {
+//    metrics.inc_req_count();
+//    let event_id: i32 = req
+//        .match_info()
+//        .get("event_id")
+//        .expect("event_id should be available because the route matched")
+//        .to_string()
+//        .parse()
+//        .unwrap_or(0);
+//    let filters = get_filters(&req);
+//    let res = db.send(Query::Events(benchmark_id)).await?;
+//    match res {
+//        Ok(r) => Ok(HttpResponse::Ok().json(r)),
+//        Err(e) => {
+//            error!("Could not complete benchmarks query: {:?}", e);
+//            Ok(HttpResponse::InternalServerError().json(json!("Error while processing query")))
+//        }
+//    }
+//}
 
 async fn new(
     item: actix_web::web::Json<NewBenchmark>,
@@ -55,7 +128,7 @@ async fn new(
     metrics.inc_req_count();
     let res = db.send(item.into_inner()).await?;
     match res {
-        Ok(r) => Ok(HttpResponse::Ok().json(json!(r))),
+        Ok(r) => Ok(HttpResponse::Ok().json(r)),
         Err(e) => {
             error!("Could not create New Benchmark: {:?}", e);
             Ok(HttpResponse::InternalServerError().json(json!({"error": e.to_string()})))
@@ -71,7 +144,7 @@ async fn new_event(
     metrics.inc_req_count();
     let res = db.send(item.into_inner()).await?;
     match res {
-        Ok(r) => Ok(HttpResponse::Ok().json(json!(r))),
+        Ok(r) => Ok(HttpResponse::Ok().json(r)),
         Err(e) => {
             error!("Could not create New Benchmark: {:?}", e);
             Ok(HttpResponse::InternalServerError().json(json!({"error": e.to_string()})))

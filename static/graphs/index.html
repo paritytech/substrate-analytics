@@ -1,0 +1,221 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Substrate Analytics</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bulma@0.8.0/css/bulma.min.css">
+    <link rel=stylesheet href=https://cdn.jsdelivr.net/npm/pretty-print-json@0.2/dist/pretty-print-json.css>
+    <script src=https://cdn.jsdelivr.net/npm/pretty-print-json@0.2/dist/pretty-print-json.min.js></script>
+    <script src="https://cdn.plot.ly/plotly-latest.min.js"></script>
+</head>
+<body>
+
+
+<nav class="navbar" role="navigation" aria-label="main navigation">
+    <div class="navbar-menu is-active">
+        <div class="navbar-start">
+            <div class=" navbar-item">
+                <h1 class="title">
+                    Substrate Analytics | Benchmarks
+                </h1>
+            </div>
+
+            <div class="navbar-item">
+                <div class="field">
+                    <div class="control">
+                        <div class="select">
+                            <select id="benchmark-select">
+                            </select>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="navbar-item">
+                <div class="field has-addons">
+                    <div class="control">
+                        <div class="select">
+                            <select id="event-select">
+                            </select>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="navbar-item">
+                <div class="field">
+                    <div class="control">
+                        <div class="select">
+                            <select id="target-select">
+                            </select>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="navbar-item">
+                <div class="field">
+
+                    <div class="control">
+                        <button class="button is-primary" onclick="viewGraphs()">View</button>
+                    </div>
+                </div>
+            </div>
+
+        </div>
+    </div>
+</nav>
+
+<template id="graph-template">
+    <div class="container"></div>
+</template>
+
+<section class="section">
+    <div class="container">
+
+        <div id="benchmark-info" class="notification"></div>
+    </div>
+</section>
+
+<section class="section" id="graphs">
+</section>
+
+<script>
+    let benchmarks = new Map();
+    let benchmarkEvents = new Map();
+    let timings = new Map();
+    const benchmarkSelect = document.querySelector('#benchmark-select');
+    const targetSelect = document.querySelector('#target-select');
+    const eventSelect = document.querySelector('#event-select');
+    const benchmarkInfo = document.querySelector('#benchmark-info');
+
+    benchmarkSelect.addEventListener('change', (event) => {
+        // Update info panel
+        const id = parseInt(event.target.value);
+        updateBenchmarkInfo(benchmarks.get(id));
+        // Fetch and populate targets
+        let request = new Request(`benchmarks/${id}/targets`);
+
+        fetch(request)
+            .then(response => response.json())
+            .then(json => {
+                targetSelect.options.length = 0;
+                const opt = new Option('ALL', 'ALL');
+                targetSelect.options.add(opt);
+                for (const target of json) {
+                    const opt = new Option(target.target, target.target);
+                    targetSelect.options.add(opt);
+                }
+            });
+
+        // Fetch and populate events
+        let eventsRequest = new Request(`benchmarks/${id}/events`);
+
+        fetch(eventsRequest)
+            .then(response => response.json())
+            .then(json => {
+                eventSelect.options.length = 0;
+                for (const event of json) {
+                    benchmarkEvents.set(event.id, event);
+                    if (event.phase !== 'end') {
+                        const opt = new Option(event.name, event.id);
+                        eventSelect.options.add(opt);
+                    }
+                }
+            });
+    });
+
+    function updateBenchmarkInfo(benchmark) {
+        benchmarkInfo.innerHTML = prettyPrintJson.toHtml(benchmark);
+    }
+
+    function viewGraphs() {
+        let e = document.getElementById('graphs');
+        let child = e.lastElementChild;
+        while (child) {
+            e.removeChild(child);
+            child = e.lastElementChild;
+        }
+        timings = new Map();
+        // Fetch data and draw graphs
+        const startEvent = benchmarkEvents.get(parseInt(eventSelect.value));
+        const endEvent = Array.from(benchmarkEvents.values()).find((item) =>
+            item.name === startEvent.name && item.phase === 'end'
+        );
+        const peer_id = benchmarks.get(parseInt(benchmarkSelect.value)).setup.substrate.peerId;
+        let logsRequest = new Request(`nodes/${peer_id}/logs/tracing.profiling?start_time=${startEvent.created_at}&end_time=${endEvent.created_at}&limit=100000`);
+        fetch(logsRequest)
+            .then(response => response.json())
+            .then(json => {
+                let currentTarget = targetSelect.value;
+                for (log of json) {
+                    if (log.logs.target !== currentTarget && currentTarget !== 'ALL') { continue; }
+                    let key = `${log.logs.target}::${log.logs.name}`;
+                    if (!timings.has(key)) {
+                        timings.set(key, [])
+                    }
+                    timings.get(key).push(log)
+                }
+                const keys = Array.from(timings.keys()).sort(); // sort keys for map to draw graphs alphabetically ordered
+                for (const key of keys) {
+                    drawGraph(timings.get(key).reverse()); // Reverse to show graphs in chronologically ascending order
+                }
+            });
+
+    }
+
+    function drawGraph(graph_data) {
+        let graphName = `${graph_data[0].logs.target}::${graph_data[0].logs.name}`;
+        let trace = {
+            type: "scatter",
+            mode: "lines+markers",
+            name: graphName,
+            y: graph_data.map(function (obj) {
+                return obj.logs.time;
+            }),
+            x: graph_data.map(function (obj) {
+                return obj.created_at;
+            }),
+            text: graph_data.map(function (obj) {
+                return prettyPrintJson.toHtml(obj.logs);
+            }),
+            marker: { size: 8 }
+        }
+        let data = [trace];
+        let layout = {
+            title: graphName
+        };
+        let template = document.querySelector('#graph-template');
+        var node = template.content.cloneNode(true);
+        var divItem = node.querySelector('div');
+        divItem.id = graphName;
+        console.log(node.id);
+        document.getElementById('graphs').appendChild(node);
+        Plotly.newPlot(graphName, data, layout);
+    }
+
+    function loadBenchmarks() {
+        benchmarkSelect.options.length = 0;
+        benchmarks.set(0, "Please select a benchmark");
+        const opt = new Option("Please select a benchmark", 0);
+        benchmarkSelect.options.add(opt);
+
+        let request = new Request('benchmarks');
+
+        fetch(request)
+            .then(response => response.json())
+            .then(json => {
+                for (const benchmark of json) {
+                    benchmarks.set(benchmark.id, benchmark);
+                    const opt = new Option(benchmark.created_at, benchmark.id);
+                    benchmarkSelect.options.add(opt);
+                }
+            });
+    }
+
+    loadBenchmarks();
+
+</script>
+</body>
+</html>

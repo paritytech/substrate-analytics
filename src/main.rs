@@ -170,7 +170,7 @@ async fn main() -> std::io::Result<()> {
             .configure(web::stats::configure)
             .configure(web::metrics::configure)
             .configure(web::benchmarks::configure)
-            //            .configure(web::pages::configure)
+            .configure(web::graphs::configure)
             .configure(web::root::configure)
     })
     .backlog(*MAX_PENDING_CONNECTIONS)
