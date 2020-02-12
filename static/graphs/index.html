@@ -116,6 +116,7 @@
             .then(response => response.json())
             .then(json => {
                 eventSelect.options.length = 0;
+                benchmarkEvents.clear();
                 for (const event of json) {
                     benchmarkEvents.set(event.id, event);
                     if (event.phase !== 'end') {
@@ -137,7 +138,7 @@
             e.removeChild(child);
             child = e.lastElementChild;
         }
-        timings = new Map();
+        timings.clear();
         // Fetch data and draw graphs
         const startEvent = benchmarkEvents.get(parseInt(eventSelect.value));
         const endEvent = Array.from(benchmarkEvents.values()).find((item) =>
@@ -153,38 +154,42 @@
                     if (log.logs.target !== currentTarget && currentTarget !== 'ALL') { continue; }
                     let key = `${log.logs.target}::${log.logs.name}`;
                     if (!timings.has(key)) {
+                        console.log(key);
                         timings.set(key, [])
                     }
                     timings.get(key).push(log)
                 }
                 const keys = Array.from(timings.keys()).sort(); // sort keys for map to draw graphs alphabetically ordered
                 for (const key of keys) {
-                    drawGraph(timings.get(key).reverse()); // Reverse to show graphs in chronologically ascending order
+                    drawGraph(timings.get(key).reverse(), startEvent.created_at, endEvent.created_at); // Reverse to show graphs in chronologically ascending order
                 }
             });
 
     }
 
-    function drawGraph(graph_data) {
+    function drawGraph(graph_data, start_x, end_x) {
         let graphName = `${graph_data[0].logs.target}::${graph_data[0].logs.name}`;
         let trace = {
             type: "scatter",
             mode: "lines+markers",
             name: graphName,
             y: graph_data.map(function (obj) {
-                return obj.logs.time;
+                return obj.logs.time / 1000000;
             }),
             x: graph_data.map(function (obj) {
-                return obj.created_at;
+                return new Date(obj.created_at);
             }),
             text: graph_data.map(function (obj) {
                 return prettyPrintJson.toHtml(obj.logs);
             }),
-            marker: { size: 8 }
+            marker: { size: 8 },
+
         }
         let data = [trace];
         let layout = {
-            title: graphName
+            title: graphName,
+            xaxis: {range: [new Date(start_x), new Date(end_x)]},
+            yaxis: { title: "Execution time (ms)"}
         };
         let template = document.querySelector('#graph-template');
         var node = template.content.cloneNode(true);
