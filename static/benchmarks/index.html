@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>Substrate Analytics</title>
+    <title>Substrate Analytics - Benchmarks</title>
     <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bulma@0.8.0/css/bulma.min.css">
     <link rel=stylesheet href=https://cdn.jsdelivr.net/npm/pretty-print-json@0.2/dist/pretty-print-json.css>
@@ -95,7 +95,7 @@
         const id = parseInt(event.target.value);
         updateBenchmarkInfo(benchmarks.get(id));
         // Fetch and populate targets
-        let request = new Request(`benchmarks/${id}/targets`);
+        let request = new Request(`/benchmarks/${id}/targets`);
 
         fetch(request)
             .then(response => response.json())
@@ -110,7 +110,7 @@
             });
 
         // Fetch and populate events
-        let eventsRequest = new Request(`benchmarks/${id}/events`);
+        let eventsRequest = new Request(`/benchmarks/${id}/events`);
 
         fetch(eventsRequest)
             .then(response => response.json())
@@ -125,6 +125,7 @@
                     }
                 }
             });
+
     });
 
     function updateBenchmarkInfo(benchmark) {
@@ -139,19 +140,22 @@
             child = e.lastElementChild;
         }
         timings.clear();
-        // Fetch data and draw graphs
+        // Fetch data and draw benchmarks
         const startEvent = benchmarkEvents.get(parseInt(eventSelect.value));
         const endEvent = Array.from(benchmarkEvents.values()).find((item) =>
             item.name === startEvent.name && item.phase === 'end'
         );
         const peer_id = benchmarks.get(parseInt(benchmarkSelect.value)).setup.substrate.peerId;
-        let logsRequest = new Request(`nodes/${peer_id}/logs/tracing.profiling?start_time=${startEvent.created_at}&end_time=${endEvent.created_at}&limit=100000`);
-        fetch(logsRequest)
+        let logsRequest = `/nodes/logs?peer_id=${peer_id}&msg=tracing.profiling&start_time=${startEvent.created_at}&end_time=${endEvent.created_at}&limit=100000`;
+
+        let currentTarget = targetSelect.value;
+        if (currentTarget !== 'ALL') {
+            logsRequest += `&target=${currentTarget}`;
+        }
+        fetch(new Request(logsRequest))
             .then(response => response.json())
             .then(json => {
-                let currentTarget = targetSelect.value;
                 for (log of json) {
-                    if (log.logs.target !== currentTarget && currentTarget !== 'ALL') { continue; }
                     let key = `${log.logs.target}::${log.logs.name}`;
                     if (!timings.has(key)) {
                         console.log(key);
@@ -159,23 +163,31 @@
                     }
                     timings.get(key).push(log)
                 }
-                const keys = Array.from(timings.keys()).sort(); // sort keys for map to draw graphs alphabetically ordered
+                const keys = Array.from(timings.keys()).sort(); // sort keys for map to draw benchmarks alphabetically ordered
+                let latest_time = 0;
                 for (const key of keys) {
-                    drawGraph(timings.get(key).reverse(), startEvent.created_at, endEvent.created_at); // Reverse to show graphs in chronologically ascending order
+                    let lt = Date.parse(timings.get("pallet_balances::transfer")[0].created_at);
+                    if (lt >  latest_time) {
+                        latest_time = lt;
+                    }
+                }
+                for (const key of keys) {
+                    drawGraph(timings.get(key).reverse(), startEvent.created_at, endEvent.latest_time); // Reverse to show benchmarks in chronologically ascending order
                 }
             });
-
     }
+
 
     function drawGraph(graph_data, start_x, end_x) {
         let graphName = `${graph_data[0].logs.target}::${graph_data[0].logs.name}`;
+        let yData = graph_data.map(function (obj) {
+            return obj.logs.time / 1000000;
+        });
         let trace = {
             type: "scatter",
             mode: "lines+markers",
             name: graphName,
-            y: graph_data.map(function (obj) {
-                return obj.logs.time / 1000000;
-            }),
+            y: yData,
             x: graph_data.map(function (obj) {
                 return new Date(obj.created_at);
             }),
@@ -195,7 +207,6 @@
         var node = template.content.cloneNode(true);
         var divItem = node.querySelector('div');
         divItem.id = graphName;
-        console.log(node.id);
         document.getElementById('graphs').appendChild(node);
         Plotly.newPlot(graphName, data, layout);
     }
@@ -205,9 +216,7 @@
         benchmarks.set(0, "Please select a benchmark");
         const opt = new Option("Please select a benchmark", 0);
         benchmarkSelect.options.add(opt);
-
-        let request = new Request('benchmarks');
-
+        let request = new Request('/benchmarks');
         fetch(request)
             .then(response => response.json())
             .then(json => {

@@ -15,7 +15,8 @@
 // along with Substrate Analytics.  If not, see <http://www.gnu.org/licenses/>.
 
 pub mod benchmarks;
-pub mod graphs;
+pub mod dash;
+pub mod feed;
 pub mod metrics;
 pub mod nodes;
 pub mod reputation;

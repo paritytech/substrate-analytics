@@ -16,7 +16,7 @@
 
 use super::get_filters;
 use super::metrics::Metrics;
-use crate::db::nodes::{NodeQueryType, NodesQuery};
+use crate::db::nodes::{LogsQuery, NodesQuery, StatsQuery};
 use crate::db::*;
 use actix::prelude::*;
 use actix_web::{HttpRequest, HttpResponse};
@@ -24,23 +24,30 @@ use actix_web::{HttpRequest, HttpResponse};
 pub fn configure(cfg: &mut actix_web::web::ServiceConfig) {
     cfg.service(
         actix_web::web::scope("/nodes")
-            .route(
-                "/{peer_id}/peer_counts",
-                actix_web::web::get().to(peer_counts),
-            )
-            .route("/{peer_id}/logs/{msg_type}", actix_web::web::get().to(logs))
-            .route("/{peer_id}/logs", actix_web::web::get().to(all_logs))
-            .route("/{peer_id}/log_stats", actix_web::web::get().to(log_stats))
+            //            .route(
+            //                "/{peer_id}/peer_counts",
+            //                actix_web::web::get().to(peer_counts),
+            //            )
+            .route("/logs", actix_web::web::get().to(logs))
+            .route("/log_stats", actix_web::web::get().to(log_stats))
             .route("", actix_web::web::get().to(all_nodes)),
     );
 }
 
 async fn all_nodes(
+    req: HttpRequest,
     db: actix_web::web::Data<Addr<DbExecutor>>,
     metrics: actix_web::web::Data<Metrics>,
 ) -> Result<HttpResponse, actix_web::Error> {
     metrics.inc_req_count();
-    send_query(NodesQuery::AllNodes, db).await
+    let filters = get_filters(&req);
+    match db.send(NodesQuery(filters)).await? {
+        Ok(r) => Ok(HttpResponse::Ok().json(json!(r))),
+        Err(e) => {
+            error!("Could not complete all_nodes query: {}", e);
+            Ok(HttpResponse::InternalServerError().json(json!("Error while processing query")))
+        }
+    }
 }
 
 async fn log_stats(
@@ -49,68 +56,31 @@ async fn log_stats(
     metrics: actix_web::web::Data<Metrics>,
 ) -> Result<HttpResponse, actix_web::Error> {
     metrics.inc_req_count();
-    let peer_id = req
-        .match_info()
-        .get("peer_id")
-        .expect("peer_id should be available because the route matched")
-        .to_string();
     let filters = get_filters(&req);
-    send_query(
-        NodesQuery::Node {
-            peer_id,
-            filters,
-            kind: NodeQueryType::LogStats,
-        },
-        db,
-    )
-    .await
+    match db.send(StatsQuery(filters)).await? {
+        Ok(r) => Ok(HttpResponse::Ok().json(json!(r))),
+        Err(e) => {
+            error!("Could not complete log_stats query: {}", e);
+            Ok(HttpResponse::InternalServerError().json(json!("Error while processing query")))
+        }
+    }
 }
 
-async fn peer_counts(
-    req: HttpRequest,
-    db: actix_web::web::Data<Addr<DbExecutor>>,
-    metrics: actix_web::web::Data<Metrics>,
-) -> Result<HttpResponse, actix_web::Error> {
-    metrics.inc_req_count();
-    let peer_id = req
-        .match_info()
-        .get("peer_id")
-        .expect("peer_id should be available because the route matched")
-        .to_string();
-    let filters = get_filters(&req);
-    send_query(
-        NodesQuery::Node {
-            peer_id,
-            filters,
-            kind: NodeQueryType::PeerInfo,
-        },
-        db,
-    )
-    .await
-}
-
-async fn all_logs(
-    req: HttpRequest,
-    db: actix_web::web::Data<Addr<DbExecutor>>,
-    metrics: actix_web::web::Data<Metrics>,
-) -> Result<HttpResponse, actix_web::Error> {
-    metrics.inc_req_count();
-    let peer_id = req
-        .match_info()
-        .get("peer_id")
-        .expect("peer_id should be available because the route matched")
-        .to_string();
-    let filters = get_filters(&req);
-    send_query(
-        NodesQuery::Node {
-            peer_id,
-            filters,
-            kind: NodeQueryType::AllLogs,
-        },
-        db,
-    )
-    .await
-}
+//async fn peer_counts(
+//    req: HttpRequest,
+//    db: actix_web::web::Data<Addr<DbExecutor>>,
+//    metrics: actix_web::web::Data<Metrics>,
+//) -> Result<HttpResponse, actix_web::Error> {
+//    metrics.inc_req_count();
+//    let filters = get_filters(&req);
+//    match db.send(LogsQuery(filters)).await? {
+//        Ok(r) => Ok(HttpResponse::Ok().json(json!(r))),
+//        Err(e) => {
+//            error!("Could not complete query: {}", e);
+//            Ok(HttpResponse::InternalServerError().json(json!("Error while processing query")))
+//        }
+//    }
+//}
 
 async fn logs(
     req: HttpRequest,
@@ -118,37 +88,11 @@ async fn logs(
     metrics: actix_web::web::Data<Metrics>,
 ) -> Result<HttpResponse, actix_web::Error> {
     metrics.inc_req_count();
-    let peer_id = req
-        .match_info()
-        .get("peer_id")
-        .expect("peer_id should be available because the route matched")
-        .to_string();
-    let msg_type = req
-        .match_info()
-        .get("msg_type")
-        .expect("msg_type should be available because the route matched")
-        .to_string();
     let filters = get_filters(&req);
-    send_query(
-        NodesQuery::Node {
-            peer_id,
-            filters,
-            kind: NodeQueryType::Logs(msg_type),
-        },
-        db,
-    )
-    .await
-}
-
-async fn send_query(
-    query: NodesQuery,
-    db: actix_web::web::Data<Addr<DbExecutor>>,
-) -> Result<HttpResponse, actix_web::Error> {
-    let res = db.send(query).await?;
-    match res {
-        Ok(r) => Ok(HttpResponse::Ok().json(r)),
+    match db.send(LogsQuery(filters)).await? {
+        Ok(r) => Ok(HttpResponse::Ok().json(json!(r))),
         Err(e) => {
-            error!("Could not complete query: {}", e);
+            error!("Could not complete logs query: {}", e);
             Ok(HttpResponse::InternalServerError().json(json!("Error while processing query")))
         }
     }

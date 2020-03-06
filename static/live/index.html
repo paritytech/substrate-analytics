@@ -1,0 +1,184 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Substrate Analytics - Live</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bulma@0.8.0/css/bulma.min.css">
+    <link rel=stylesheet href=https://cdn.jsdelivr.net/npm/pretty-print-json@0.2/dist/pretty-print-json.css>
+    <script src=https://cdn.jsdelivr.net/npm/pretty-print-json@0.2/dist/pretty-print-json.min.js></script>
+    <script src="https://cdn.plot.ly/plotly-latest.min.js"></script>
+</head>
+<body>
+
+
+<nav class="navbar" role="navigation" aria-label="main navigation">
+    <div class="navbar-menu is-active">
+        <div class="navbar-start">
+            <div class=" navbar-item">
+                <h1 class="title">
+                    Substrate Analytics | Benchmarks
+                </h1>
+            </div>
+
+            <div class="navbar-item">
+                <div class="field">
+                    <div class="control">
+                        <div class="select">
+                            <select id="benchmark-select">
+                            </select>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="navbar-item">
+                <div class="field has-addons">
+                    <div class="control">
+                        <div class="select">
+                            <select id="event-select">
+                            </select>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="navbar-item">
+                <div class="field">
+                    <div class="control">
+                        <div class="select">
+                            <select id="target-select">
+                            </select>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="navbar-item">
+                <div class="field">
+
+                    <div class="control">
+                        <button class="button is-primary" onclick="viewGraphs()">View</button>
+                    </div>
+                </div>
+            </div>
+
+        </div>
+    </div>
+</nav>
+
+<template id="graph-template">
+    <div class="container"></div>
+</template>
+
+<section class="section">
+    <div class="container">
+
+        <div id="benchmark-info" class="notification"></div>
+    </div>
+</section>
+
+<section class="section" id="graphs">
+</section>
+
+<script>
+    let nodes = new Map();
+    let benchmarkEvents = new Map();
+    let timings = new Map();
+    const nodeSelect = document.querySelector('#benchmark-select');
+    const targetSelect = document.querySelector('#target-select');
+    const eventSelect = document.querySelector('#event-select');
+    const benchmarkInfo = document.querySelector('#benchmark-info');
+
+    nodeSelect.addEventListener('change', (event) => {
+        // Update info panel
+        const id = parseInt(event.target.value);
+        updateBenchmarkInfo(nodes.get(id));
+        // Fetch and populate targets
+        let request = new Request(`benchmarks/${id}/targets`);
+
+        fetch(request)
+            .then(response => response.json())
+            .then(json => {
+                targetSelect.options.length = 0;
+                const opt = new Option('ALL', 'ALL');
+                targetSelect.options.add(opt);
+                for (const target of json) {
+                    const opt = new Option(target.target, target.target);
+                    targetSelect.options.add(opt);
+                }
+            });
+
+        // Fetch and populate events
+        let eventsRequest = new Request(`benchmarks/${id}/events`);
+
+        fetch(eventsRequest)
+            .then(response => response.json())
+            .then(json => {
+                eventSelect.options.length = 0;
+                benchmarkEvents.clear();
+                for (const event of json) {
+                    benchmarkEvents.set(event.id, event);
+                    if (event.phase !== 'end') {
+                        const opt = new Option(event.name, event.id);
+                        eventSelect.options.add(opt);
+                    }
+                }
+            });
+    });
+
+    function drawGraph(graph_data, start_x, end_x) {
+        let graphName = `${graph_data[0].logs.target}::${graph_data[0].logs.name}`;
+        let yData = graph_data.map(function (obj) {
+            return obj.logs.time / 1000000;
+        });
+        let trace = {
+            type: "scatter",
+            mode: "lines+markers",
+            name: graphName,
+            y: yData,
+            x: graph_data.map(function (obj) {
+                return new Date(obj.created_at);
+            }),
+            text: graph_data.map(function (obj) {
+                return prettyPrintJson.toHtml(obj.logs);
+            }),
+            marker: { size: 8 },
+
+        }
+        let data = [trace];
+        let layout = {
+            title: graphName,
+            xaxis: {range: [new Date(start_x), new Date(end_x)]},
+            yaxis: { title: "Execution time (ms)"}
+        };
+        let template = document.querySelector('#graph-template');
+        var node = template.content.cloneNode(true);
+        var divItem = node.querySelector('div');
+        divItem.id = graphName;
+        document.getElementById('graphs').appendChild(node);
+        Plotly.newPlot(graphName, data, layout);
+    }
+
+    function loadNodes() {
+        nodeSelect.options.length = 0;
+        nodes.set(0, "Please select a node");
+        const opt = new Option("Please select a node", 0);
+        nodeSelect.options.add(opt);
+        let request = new Request('nodes');
+        fetch(request)
+            .then(response => response.json())
+            .then(json => {
+                for (const node of json) {
+                    nodes.set(node.id, node);
+                    const opt = new Option(node.peer_id, node.peer_id);
+                    nodeSelect.options.add(opt);
+                }
+            });
+    }
+
+    loadNodes();
+
+</script>
+</body>
+</html>

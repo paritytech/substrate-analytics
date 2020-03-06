@@ -28,65 +28,7 @@ pub struct Filters {
     pub end_time: Option<NaiveDateTime>,
     pub max_age_s: Option<i64>,
     pub limit: Option<i32>,
+    pub peer_id: Option<String>,
+    pub target: Option<String>,
+    pub msg: Option<String>,
 }
-
-//impl Default for Filters {
-//    fn default() -> Self {
-//        Filters {
-//            max_age_s: Some(60),
-//            ..Default::default()
-//        }
-//    }
-//}
-
-//impl Filters {
-//    pub fn from_hashmap(hashmap: Ref<HashMap<String, String>>) -> Result<Self, Vec<String>> {
-//        let mut errors = Vec::new();
-//        let start_time: Option<NaiveDateTime> = match hashmap.get("start_time") {
-//            None => None,
-//            Some(some) => match some.parse() {
-//                Ok(value) => Some(value),
-//                Err(_) => {
-//                    errors.push(format_error("start_time", TIME_FORMAT));
-//                    None
-//                }
-//            },
-//        };
-//        let end_time: Option<NaiveDateTime> = match hashmap.get("end_time") {
-//            None => None,
-//            Some(some) => match some.parse() {
-//                Ok(value) => Some(value),
-//                Err(_) => {
-//                    errors.push(format_error("end_time", TIME_FORMAT));
-//                    None
-//                }
-//            },
-//        };
-//        let limit: Option<i32> = match hashmap.get("limit") {
-//            None => None,
-//            Some(some) => match some.parse() {
-//                Ok(value) => Some(value),
-//                Err(_) => {
-//                    errors.push(format_error("limit", "100"));
-//                    None
-//                }
-//            },
-//        };
-//        if errors.is_empty() {
-//            Ok(Filters {
-//                start_time,
-//                end_time,
-//                limit,
-//            })
-//        } else {
-//            Err(errors)
-//        }
-//    }
-//}
-//
-//fn format_error(key: &str, format: &str) -> String {
-//    format!(
-//        "Unable to parse `{}`, please use the format: `{}`",
-//        key, format
-//    )
-//}

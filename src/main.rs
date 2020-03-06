@@ -26,21 +26,23 @@ extern crate serde_derive;
 #[macro_use]
 extern crate serde_json;
 
+pub mod cache;
 pub mod db;
 pub mod schema;
 pub mod util;
 mod web;
+
+use cache::Cache;
 
 use dotenv::dotenv;
 use std::env;
 use std::time::Duration;
 
 use crate::db::models::NewSubstrateLog;
+use crate::db::peer_data::UpdateCache;
 use crate::db::*;
 use actix::prelude::*;
 use actix_web::{middleware, App, HttpServer};
-
-const HOURS_32_YEARS: u32 = 280_320;
 
 lazy_static! {
     /// Must be set
@@ -57,7 +59,7 @@ lazy_static! {
     pub static ref PURGE_FREQUENCY: Duration = Duration::from_secs(
         parse_env("PURGE_FREQUENCY").unwrap_or(600)
     );
-    pub static ref LOG_EXPIRY_HOURS: u32 = parse_env("LOG_EXPIRY_HOURS").unwrap_or(HOURS_32_YEARS);
+    pub static ref LOG_EXPIRY_HOURS: u32 = parse_env("LOG_EXPIRY_HOURS").unwrap_or(3);
     pub static ref MAX_PENDING_CONNECTIONS: i32 = parse_env("MAX_PENDING_CONNECTIONS").unwrap_or(8192);
 
     // Set Codec to accept payload size of 512 MiB because default 65KiB is not enough
@@ -95,6 +97,20 @@ impl Handler<NewSubstrateLog> for LogBuffer {
     }
 }
 
+//Temp test
+impl Handler<db::peer_data::PeerDataResponse> for LogBuffer {
+    type Result = Result<(), &'static str>;
+
+    fn handle(
+        &mut self,
+        msg: db::peer_data::PeerDataResponse,
+        _: &mut Self::Context,
+    ) -> Self::Result {
+        println!("Received PeerData from Cache: {:?}", msg);
+        Ok(())
+    }
+}
+
 #[derive(Clone)]
 struct SaveLogs;
 
@@ -125,11 +141,14 @@ async fn main() -> std::io::Result<()> {
     env_logger::init();
     log_statics();
     info!("Starting Substrate SAVE");
-    //    let sys = actix::System::new("substrate-analytics");
     info!("Creating database pool");
     let pool = create_pool();
     info!("Starting DbArbiter with {} threads", *NUM_THREADS);
-    let db_arbiter = SyncArbiter::start(*NUM_THREADS, move || db::DbExecutor::new(pool.clone()));
+    let mut cache = Cache::new().start();
+    let db_cache = cache.clone();
+    let db_arbiter = SyncArbiter::start(*NUM_THREADS, move || {
+        db::DbExecutor::new(pool.clone(), db_cache.clone())
+    });
     info!("DbExecutor started");
 
     let log_buffer = LogBuffer {
@@ -138,11 +157,43 @@ async fn main() -> std::io::Result<()> {
     }
     .start();
 
+    let recip: Recipient<db::peer_data::PeerDataResponse> = log_buffer.clone().recipient();
+
+    use std::convert::TryInto;
+    let now = std::time::SystemTime::now();
+    let ts = now
+        .checked_sub(Duration::from_secs(3600))
+        .expect("We should be using sane values for default_start_time");
+    let ds = ts
+        .duration_since(std::time::UNIX_EPOCH)
+        .expect("We should be using sane values for default_start_time");
+    let start_time =
+        chrono::NaiveDateTime::from_timestamp((ds.as_secs() as u64).try_into().unwrap(), 0);
+    let subscription = crate::cache::Subscription {
+        peer_id: "".to_owned(),
+        msg: "system.interval".to_owned(),
+        subscriber_addr: recip,
+        start_time: None,
+        interest: crate::cache::Interest::Subscribe,
+    };
+
+    match cache.send(subscription).await {
+        Ok(v) => info!("Sent subscription"),
+        Err(e) => error!("Could not send subscription due to: {:?}", e),
+    }
+
     util::PeriodicAction {
         interval: *PURGE_FREQUENCY,
         message: PurgeLogs {
             hours_valid: *LOG_EXPIRY_HOURS,
         },
+        recipient: db_arbiter.clone().recipient(),
+    }
+    .start();
+
+    util::PeriodicAction {
+        interval: Duration::from_millis(1000),
+        message: UpdateCache(db_arbiter.clone()),
         recipient: db_arbiter.clone().recipient(),
     }
     .start();
@@ -170,7 +221,8 @@ async fn main() -> std::io::Result<()> {
             .configure(web::stats::configure)
             .configure(web::metrics::configure)
             .configure(web::benchmarks::configure)
-            .configure(web::graphs::configure)
+            .configure(web::dash::configure)
+            .configure(web::feed::configure)
             .configure(web::root::configure)
     })
     .backlog(*MAX_PENDING_CONNECTIONS)

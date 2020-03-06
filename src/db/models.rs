@@ -34,6 +34,7 @@ pub struct NewBenchmarkEvent {
     pub benchmark_id: i32,
     pub name: String,
     pub phase: String,
+    pub created_at: NaiveDateTime,
 }
 
 #[derive(Queryable, Identifiable, PartialEq, Serialize, Debug)]

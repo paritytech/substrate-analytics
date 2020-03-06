@@ -14,8 +14,9 @@
 // You should have received a copy of the GNU General Public License
 // along with Substrate Analytics.  If not, see <http://www.gnu.org/licenses/>.
 
-use actix_files as fs;
+use actix_files::Files;
 
 pub fn configure(cfg: &mut actix_web::web::ServiceConfig) {
-    cfg.service(fs::Files::new("/graphs", "./static/graphs/").index_file("index.html"));
+    cfg.service(Files::new("dash/benchmarks", "./static/benchmarks/").index_file("index.html"));
+    cfg.service(Files::new("dash/live", "./static/live/").index_file("index.html"));
 }

@@ -18,6 +18,7 @@ pub mod benchmarks;
 pub mod filters;
 pub mod models;
 pub mod nodes;
+pub mod peer_data;
 pub mod reputation;
 pub mod stats;
 
@@ -29,11 +30,18 @@ use diesel::r2d2::{ConnectionManager, Pool, PoolError};
 use diesel::result::QueryResult;
 use diesel::RunQueryDsl;
 
+use std::time::Duration;
+
 use self::models::{NewPeerConnection, NewSubstrateLog, PeerConnection};
+use crate::cache::Cache;
+use crate::db::peer_data::PeerDataResponse;
 use crate::{DATABASE_POOL_SIZE, DATABASE_URL};
+
+pub const RECORD_LIMIT: i32 = 1000;
 
 pub struct DbExecutor {
     pool: Pool<ConnectionManager<PgConnection>>,
+    cache: Addr<Cache>,
 }
 
 impl Actor for DbExecutor {
@@ -53,8 +61,8 @@ impl DbExecutor {
         result
     }
 
-    pub fn new(pool: Pool<ConnectionManager<PgConnection>>) -> Self {
-        DbExecutor { pool }
+    pub fn new(pool: Pool<ConnectionManager<PgConnection>>, cache: Addr<Cache>) -> Self {
+        DbExecutor { pool, cache }
     }
 }
 
