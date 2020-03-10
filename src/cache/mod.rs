@@ -15,6 +15,7 @@
 // along with Substrate Analytics.  If not, see <http://www.gnu.org/licenses/>.
 
 use crate::db;
+use crate::db::peer_data::CreatedAt;
 use crate::db::{
     filters::Filters,
     peer_data::{
@@ -29,24 +30,22 @@ use diesel::{result::QueryResult, sql_query, RunQueryDsl};
 use failure::Error;
 use futures::future::join_all;
 use serde_json::Value;
-use std::collections::{HashMap, HashSet, VecDeque};
+use slice_deque::SliceDeque;
+use std::collections::{HashMap, HashSet};
 use std::hash::{Hash, Hasher};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 /// Cache is responsible for:
 ///
-/// - Automatically fetching `Log`s from the database for each `peer_id`
-/// and `msg` combination, requested by a Subscriber
+/// - Storing `PeerData` in memory, partitioned by `peer_id` and then `msg`
 ///
-/// - Storing this data in memory, partitioned by `peer_id` and then `msg`
+/// - Storing subscribers and pushing relevant data to them as it becomes available
 ///
-/// - Periodically updating the cache and pushing new data out to all subscribers
+/// - Receiving updates to the cache
 ///
 /// - Cleaning out data when it's older than `LOG_EXPIRY_HOURS`
-///
-/// - Periodically dropping a cache if not accessed for some time
 pub struct Cache {
-    cache: HashMap<PeerMessageStartTime, VecDeque<PeerData>>,
+    cache: HashMap<PeerMessageStartTime, SliceDeque<PeerData>>,
     subscribers: HashMap<Recipient<PeerDataResponse>, SubscriberInfo>,
 }
 
@@ -58,10 +57,68 @@ impl Handler<PeerDataResponse> for Cache {
     type Result = Result<(), &'static str>;
 
     fn handle(&mut self, msg: PeerDataResponse, ctx: &mut Self::Context) -> Self::Result {
-        debug!("{:?}", msg);
+        info!("Data length = {:?}", msg.data.len());
         // Update cache
+        if let Some(element) = msg.data.get(0) {
+            let msg_type = match element {
+                PeerData::Interval(_) => "system.interval",
+                PeerData::Profiling(_) => "tracing.profiling",
+            };
+            drop(element);
+            let pmst = PeerMessageStartTime {
+                peer_message: PeerMessage {
+                    peer_id: msg.peer_id,
+                    msg: msg_type.to_owned(),
+                },
+                last_accessed: create_date_time(0),
+            };
+            let mut pd = self.cache.get_mut(&pmst);
+            let mut peer_data: &mut SliceDeque<PeerData>;
+            match pd.is_some() {
+                true => peer_data = pd.unwrap(),
+                false => {
+                    warn!("Received PeerDataResponse for PeerMessage we no longer have a cache for, discarding...");
+                    return Ok(());
+                }
+            }
+            let mut vpd = msg.data;
+            peer_data.append(&mut vpd[..].into());
+            // Iterate through subscribers and send latest data based on their last_updated time
+            for (recipient, mut subscriber_info) in self.subscribers.iter_mut().filter(|(r, s)| {
+                s.peer_messages
+                    .0
+                    .iter()
+                    .find(|x| {
+                        info!(
+                            "x == &&pmst.peer_message: {:?} == {:?}",
+                            x, &&pmst.peer_message
+                        );
+                        x == &&pmst.peer_message
+                    })
+                    .is_some()
+            }) {
+                //
+                info!("SubscriberInfo: {:?}", &subscriber_info);
+                let idx = match peer_data
+                    .binary_search_by(|item| item.created_at().cmp(&subscriber_info.last_updated))
+                {
+                    Ok(n) => n,
+                    _ => 0,
+                };
+                let response_data = peer_data[idx..].to_vec();
+                let pdr = PeerDataResponse {
+                    peer_id: pmst.peer_message.peer_id.clone(),
+                    data: response_data,
+                };
+                if let Err(e) = recipient.try_send(pdr) {
+                    error!("Unable to send PeerDataResponse: {:?}", e);
+                } else {
+                    subscriber_info.last_updated =
+                        peer_data.last().unwrap().created_at().to_owned();
+                }
+            }
+        }
 
-        // Iterate through subscribers and send latest data based on their last_updated time
         Ok(())
     }
 }
@@ -177,6 +234,6 @@ impl Cache {
         };
         debug!("Adding cache: {:?}", &pmc);
         // Set last accessed now, otherwise could be missed if subscriber is closed before accessed
-        let mut peer_cache = self.cache.entry(pmc).or_insert(VecDeque::new());
+        let mut peer_cache = self.cache.entry(pmc).or_insert(SliceDeque::new());
     }
 }

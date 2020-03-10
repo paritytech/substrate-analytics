@@ -26,7 +26,20 @@ use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use super::{filters::Filters, DbExecutor, RECORD_LIMIT};
 use futures::{FutureExt, TryFutureExt};
 
-#[derive(Debug)]
+pub trait CreatedAt {
+    fn created_at(&self) -> &NaiveDateTime;
+}
+
+impl CreatedAt for PeerData {
+    fn created_at(&self) -> &NaiveDateTime {
+        match self {
+            PeerData::Profiling(v) => &v.created_at,
+            PeerData::Interval(v) => &v.created_at,
+        }
+    }
+}
+
+#[derive(Clone, Debug)]
 pub enum PeerData {
     Profiling(Profiling),
     Interval(Interval),
@@ -48,13 +61,22 @@ pub struct PeerMessage {
     pub msg: String,
 }
 
+#[derive(Debug)]
 pub struct PeerMessages(pub HashSet<PeerMessage>);
 
-#[derive(Eq, PartialEq, Clone, Debug)]
+#[derive(Clone, Debug)]
 pub struct PeerMessageStartTime {
     pub peer_message: PeerMessage,
     pub last_accessed: NaiveDateTime,
 }
+
+// TODO need to refactor the types
+impl PartialEq for PeerMessageStartTime {
+    fn eq(&self, other: &Self) -> bool {
+        self.peer_message == other.peer_message
+    }
+}
+impl Eq for PeerMessageStartTime {}
 
 impl Hash for PeerMessageStartTime {
     fn hash<H: Hasher>(&self, state: &mut H) {
@@ -62,6 +84,7 @@ impl Hash for PeerMessageStartTime {
     }
 }
 
+#[derive(Debug)]
 pub struct SubscriberInfo {
     pub peer_messages: PeerMessages,
     pub last_updated: NaiveDateTime,
@@ -75,34 +98,6 @@ impl SubscriberInfo {
         }
     }
 }
-
-//pub enum PeerDataRequest {
-//    Profiling(Filters),
-//    Interval(Filters),
-//}
-//
-//impl Message for PeerDataRequest {
-//    type Result = ();
-//}
-//
-//impl Handler<PeerDataRequest> for DbExecutor {
-//    type Result = ();
-//
-//    fn handle(&mut self, msg: PeerDataRequest, _: &mut Self::Context) -> Self::Result {
-//        match msg {
-//            PeerDataRequest::Profiling(f) => {
-//                if let Ok(pdr) = self.get_profiling(f) {
-//                    self.cache.send(pdr);
-//                }
-//            }
-//            PeerDataRequest::Interval(f) => {
-//                if let Ok(pdr) = self.get_interval(f) {
-//                    self.cache.send(pdr);
-//                }
-//            }
-//        }
-//    }
-//}
 
 pub struct PeerMessageStartTimeRequest(pub Addr<crate::cache::Cache>);
 
@@ -128,24 +123,26 @@ impl Handler<UpdateCache> for DbExecutor {
     type Result = Result<(), &'static str>;
 
     fn handle(&mut self, msg: UpdateCache, ctx: &mut Self::Context) -> Self::Result {
-        info!("Updating Cache");
-
+        debug!("Updating Cache");
+        // TODO limit concurrency to 1
         let UpdateCache(addr) = msg;
         let req = self
             .cache
-            .send(PeerMessageStartTimeRequest(self.cache.clone()))
-            .map(|res| async move {
-                println!("IN THEN FUTURE");
-                match res {
-                    Ok(Ok(pmsts)) => {
-                        debug!("sending: {:?}", pmsts);
-                        addr.do_send(pmsts);
-                    }
-                    Ok(Err(e)) => error!("Unable to send PeerMessageStartTimeRequest : {:?}", e),
-                    Err(e) => error!("Unable to send PeerMessageStartTimeRequest : {:?}", e),
+            .send(PeerMessageStartTimeRequest(self.cache.clone()));
+
+        let res = futures::executor::block_on(req);
+        let res = res.map(|r| async move {
+            match r {
+                Ok(pmsts) => {
+                    trace!("sending: {:?}", pmsts);
+                    addr.do_send(pmsts);
                 }
-            });
-        futures::executor::block_on(req);
+                Err(e) => error!("Unable to send PeerMessageStartTimeRequest : {:?}", e),
+            }
+        });
+        if let Ok(res1) = res {
+            futures::executor::block_on(res1);
+        }
 
         impl Handler<PeerMessageStartTimeList> for DbExecutor {
             type Result = ();
@@ -186,8 +183,11 @@ impl DbExecutor {
                 return;
             }
         };
-        if let Ok(res) = pd_res {
+        debug!("pd_res: {:?}", pd_res);
+        if let Ok(pdr) = pd_res {
             // send to cache
+            let req = self.cache.send(pdr);
+            futures::executor::block_on(req);
         }
     }
 }
@@ -236,16 +236,16 @@ impl DbExecutor {
     }
 }
 
-#[derive(Serialize, Deserialize, Debug, QueryableByName)]
+#[derive(Serialize, Deserialize, QueryableByName, Clone, Debug)]
 pub struct Profiling {
     #[sql_type = "BigInt"]
-    ns: i64,
+    pub ns: i64,
     #[sql_type = "Text"]
-    name: String,
+    pub name: String,
     #[sql_type = "Text"]
-    target: String,
+    pub target: String,
     #[sql_type = "Timestamp"]
-    created_at: NaiveDateTime,
+    pub created_at: NaiveDateTime,
 }
 
 impl DbExecutor {
@@ -254,28 +254,26 @@ impl DbExecutor {
         match self.with_connection(|conn| {
             let query = sql_query(
                 "SELECT CAST(logs->>'cpu' AS FLOAT) AS cpu, \
-                 SELECT CAST(logs->>'peers' AS INTEGER) AS peers, \
-                 SELECT CAST(logs->>'height' AS INTEGER) AS height, \
-                 SELECT CAST(logs->>'memory' AS INTEGER) AS memory, \
-                 SELECT CAST(logs->>'txcount' AS INTEGER) AS txcount, \
-                 SELECT CAST(logs->>'finalized_height' AS INTEGER) AS finalized_height, \
-                 SELECT CAST(logs->>'bandwidth_upload' AS INTEGER) AS bandwidth_upload, \
-                 SELECT CAST(logs->>'bandwidth_download' AS INTEGER) AS bandwidth_download, \
-                 SELECT CAST(logs->>'disk_read_per_sec' AS INTEGER) AS disk_read_per_sec, \
-                 SELECT CAST(logs->>'disk_write_per_sec' AS INTEGER) AS disk_write_per_sec, \
-                 SELECT CAST(logs->>'used_db_cache_size' AS INTEGER) AS used_db_cache_size, \
-                 SELECT CAST(logs->>'used_state_cache_size' AS INTEGER) AS used_state_cache_size, \
+                 CAST(logs->>'peers' AS INTEGER) AS peers, \
+                 CAST(logs->>'height' AS INTEGER) AS height, \
+                 CAST(logs->>'memory' AS INTEGER) AS memory, \
+                 CAST(logs->>'txcount' AS INTEGER) AS txcount, \
+                 CAST(logs->>'finalized_height' AS INTEGER) AS finalized_height, \
+                 CAST(logs->>'bandwidth_upload' AS INTEGER) AS bandwidth_upload, \
+                 CAST(logs->>'bandwidth_download' AS INTEGER) AS bandwidth_download, \
+                 CAST(logs->>'disk_read_per_sec' AS INTEGER) AS disk_read_per_sec, \
+                 CAST(logs->>'disk_write_per_sec' AS INTEGER) AS disk_write_per_sec, \
+                 CAST(logs->>'used_db_cache_size' AS INTEGER) AS used_db_cache_size, \
+                 CAST(logs->>'used_state_cache_size' AS INTEGER) AS used_state_cache_size, \
                  logs->>'finalized_hash' AS finalized_hash, \
                  logs->>'best' AS best, \
-                 created_at\
-                 FROM ( \
-                 SELECT logs->>'msg' AS log_type \
+                 sl.created_at as created_at \
                  FROM substrate_logs sl \
                  LEFT JOIN peer_connections pc ON sl.peer_connection_id = pc.id \
-                 WHERE peer_id = $1 \
+                 WHERE pc.peer_id = $1 \
                  AND sl.created_at > $2 \
                  AND logs->>'msg' = $3
-                 ORDER BY created_at DESC \
+                 ORDER BY sl.created_at DESC \
                  LIMIT $4",
             )
             .bind::<Text, _>(peer_id.clone())
@@ -303,38 +301,38 @@ impl DbExecutor {
     }
 }
 
-#[derive(Serialize, Deserialize, Debug, QueryableByName)]
+#[derive(Serialize, Deserialize, QueryableByName, Clone, Debug)]
 pub struct Interval {
     #[sql_type = "Float"]
-    cpu: f32,
+    pub cpu: f32,
     #[sql_type = "Integer"]
-    peers: i32,
+    pub peers: i32,
     #[sql_type = "Integer"]
-    height: i32,
+    pub height: i32,
     #[sql_type = "Integer"]
-    memory: i32,
+    pub memory: i32,
     #[sql_type = "Integer"]
-    txcount: i32,
+    pub txcount: i32,
     #[sql_type = "Integer"]
-    finalized_height: i32,
+    pub finalized_height: i32,
     #[sql_type = "Integer"]
-    bandwidth_upload: i32,
+    pub bandwidth_upload: i32,
     #[sql_type = "Integer"]
-    bandwidth_download: i32,
+    pub bandwidth_download: i32,
     #[sql_type = "Integer"]
-    disk_read_per_sec: i32,
+    pub disk_read_per_sec: i32,
     #[sql_type = "Integer"]
-    disk_write_per_sec: i32,
+    pub disk_write_per_sec: i32,
     #[sql_type = "Integer"]
-    used_db_cache_size: i32,
+    pub used_db_cache_size: i32,
     #[sql_type = "Integer"]
-    used_state_cache_size: i32,
+    pub used_state_cache_size: i32,
     #[sql_type = "Text"]
-    finalized_hash: String,
+    pub finalized_hash: String,
     #[sql_type = "Text"]
-    best: String,
+    pub best: String,
     #[sql_type = "Timestamp"]
-    created_at: NaiveDateTime,
+    pub created_at: NaiveDateTime,
 }
 
 pub fn create_date_time(seconds_ago: u64) -> NaiveDateTime {

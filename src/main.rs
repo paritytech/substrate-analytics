@@ -106,7 +106,7 @@ impl Handler<db::peer_data::PeerDataResponse> for LogBuffer {
         msg: db::peer_data::PeerDataResponse,
         _: &mut Self::Context,
     ) -> Self::Result {
-        println!("Received PeerData from Cache: {:?}", msg);
+        info!("Received PeerData from Cache: {:?}", msg);
         Ok(())
     }
 }
@@ -170,7 +170,7 @@ async fn main() -> std::io::Result<()> {
     let start_time =
         chrono::NaiveDateTime::from_timestamp((ds.as_secs() as u64).try_into().unwrap(), 0);
     let subscription = crate::cache::Subscription {
-        peer_id: "".to_owned(),
+        peer_id: "QmatrD9AsAchDfxyQQf1gmVmwTubEVCSVXJQhwLo1jVSmH".to_owned(),
         msg: "system.interval".to_owned(),
         subscriber_addr: recip,
         start_time: None,
