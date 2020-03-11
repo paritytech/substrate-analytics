@@ -88,13 +88,7 @@ impl Handler<PeerDataResponse> for Cache {
                 s.peer_messages
                     .0
                     .iter()
-                    .find(|x| {
-                        info!(
-                            "x == &&pmst.peer_message: {:?} == {:?}",
-                            x, &&pmst.peer_message
-                        );
-                        x == &&pmst.peer_message
-                    })
+                    .find(|x| x == &&pmst.peer_message)
                     .is_some()
             }) {
                 //
