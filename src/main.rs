@@ -106,7 +106,10 @@ impl Handler<db::peer_data::PeerDataResponse> for LogBuffer {
         msg: db::peer_data::PeerDataResponse,
         _: &mut Self::Context,
     ) -> Self::Result {
-        info!("Received PeerData from Cache: {:?}", msg);
+        info!(
+            "Received PeerData from Cache - length: {:?}",
+            msg.data.len()
+        );
         Ok(())
     }
 }
@@ -140,7 +143,7 @@ async fn main() -> std::io::Result<()> {
     dotenv().ok();
     env_logger::init();
     log_statics();
-    info!("Starting Substrate SAVE");
+    info!("Starting substrate-analytics");
     info!("Creating database pool");
     let pool = create_pool();
     info!("Starting DbArbiter with {} threads", *NUM_THREADS);
@@ -170,7 +173,7 @@ async fn main() -> std::io::Result<()> {
     let start_time =
         chrono::NaiveDateTime::from_timestamp((ds.as_secs() as u64).try_into().unwrap(), 0);
     let subscription = crate::cache::Subscription {
-        peer_id: "QmatrD9AsAchDfxyQQf1gmVmwTubEVCSVXJQhwLo1jVSmH".to_owned(),
+        peer_id: "QmVtNxezF8fbMp4YmfnstZiTE8HBE8P3FTHYTn78XBqPLL".to_owned(),
         msg: "system.interval".to_owned(),
         subscriber_addr: recip,
         start_time: None,
