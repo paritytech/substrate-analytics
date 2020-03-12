@@ -41,7 +41,6 @@ pub const RECORD_LIMIT: i32 = 1000;
 
 pub struct DbExecutor {
     pool: Pool<ConnectionManager<PgConnection>>,
-    cache: Addr<Cache>,
 }
 
 impl Actor for DbExecutor {
@@ -61,8 +60,8 @@ impl DbExecutor {
         result
     }
 
-    pub fn new(pool: Pool<ConnectionManager<PgConnection>>, cache: Addr<Cache>) -> Self {
-        DbExecutor { pool, cache }
+    pub fn new(pool: Pool<ConnectionManager<PgConnection>>) -> Self {
+        DbExecutor { pool }
     }
 }
 

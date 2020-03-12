@@ -51,6 +51,12 @@ pub struct PeerMessage {
     pub msg: String,
 }
 
+impl std::fmt::Display for PeerMessage {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "({}, {})", self.peer_id, self.msg)
+    }
+}
+
 #[derive(Debug)]
 pub struct PeerMessages(pub HashSet<PeerMessage>);
 
@@ -58,19 +64,6 @@ pub struct PeerMessages(pub HashSet<PeerMessage>);
 pub struct PeerMessageStartTime {
     pub peer_message: PeerMessage,
     pub last_accessed: NaiveDateTime,
-}
-
-impl PartialEq for PeerMessageStartTime {
-    fn eq(&self, other: &Self) -> bool {
-        self.peer_message == other.peer_message
-    }
-}
-impl Eq for PeerMessageStartTime {}
-
-impl Hash for PeerMessageStartTime {
-    fn hash<H: Hasher>(&self, state: &mut H) {
-        self.peer_message.hash(state);
-    }
 }
 
 #[derive(Debug)]
@@ -95,82 +88,37 @@ impl Message for PeerMessageStartTimeRequest {
 }
 
 #[derive(Debug)]
-pub struct PeerMessageStartTimeList(pub Vec<PeerMessageStartTime>);
+pub struct PeerMessageStartTimeList {
+    pub list: Vec<PeerMessageStartTime>,
+    pub cache: Recipient<PeerDataResponse>,
+}
 
 impl Message for PeerMessageStartTimeList {
     type Result = ();
 }
 
-#[derive(Clone)]
-pub struct UpdateCache(pub Addr<DbExecutor>);
-
-impl Message for UpdateCache {
-    type Result = Result<(), &'static str>;
-}
-
-impl Handler<UpdateCache> for DbExecutor {
-    type Result = Result<(), &'static str>;
-
-    fn handle(&mut self, msg: UpdateCache, ctx: &mut Self::Context) -> Self::Result {
-        debug!("Updating Cache");
-        // TODO limit concurrency to 1
-        let UpdateCache(addr) = msg;
-        let req = self
-            .cache
-            .send(PeerMessageStartTimeRequest(self.cache.clone()));
-
-        let res = futures::executor::block_on(req);
-
-        let res = res.map(|r| async move {
-            match r {
-                Ok(pmsts) => {
-                    trace!("sending: {:?}", pmsts);
-                    addr.do_send(pmsts);
-                }
-                Err(e) => error!("Unable to send PeerMessageStartTimeRequest : {:?}", e),
-            }
-        });
-        if let Ok(res1) = res {
-            futures::executor::block_on(res1);
-        }
-
-        impl Handler<PeerMessageStartTimeList> for DbExecutor {
-            type Result = ();
-            fn handle(
-                &mut self,
-                msg: PeerMessageStartTimeList,
-                ctx: &mut Self::Context,
-            ) -> Self::Result {
-                debug!("Handling PeerMessageStartTimeList");
-                let PeerMessageStartTimeList(pmuts) = msg;
-                for pmut in pmuts {
-                    let p = pmut.clone();
-                    info!("Last accessed: {}", &p.last_accessed);
-                    self.get_latest_msgs(
-                        p.last_accessed,
-                        p.peer_message.peer_id,
-                        p.peer_message.msg,
-                    );
+impl Handler<PeerMessageStartTimeList> for DbExecutor {
+    type Result = ();
+    fn handle(&mut self, msg: PeerMessageStartTimeList, ctx: &mut Self::Context) -> Self::Result {
+        debug!("Handling PeerMessageStartTimeList");
+        let cache = msg.cache;
+        let pmuts = msg.list;
+        for pmut in pmuts {
+            let p = pmut.clone();
+            let filters = Filters {
+                start_time: Some(p.last_accessed),
+                peer_id: Some(p.peer_message.peer_id),
+                msg: Some(p.peer_message.msg),
+                ..Default::default()
+            };
+            let pd_res = self.get_logs(filters);
+            trace!("pd_res: {:?}", pd_res);
+            if let Ok(pdr) = pd_res {
+                // send to cache
+                if let Err(e) = cache.do_send(pdr) {
+                    error!("Sending PeerDataResponse to Cache failed : {:?}", e);
                 }
             }
-        }
-        Ok(())
-    }
-}
-
-impl DbExecutor {
-    fn get_latest_msgs(&self, start_time: NaiveDateTime, peer_id: String, msg: String) {
-        let filters = Filters {
-            start_time: Some(start_time),
-            peer_id: Some(peer_id),
-            msg: Some(msg),
-            ..Default::default()
-        };
-        let pd_res = self.get_logs(filters);
-        debug!("pd_res: {:?}", pd_res);
-        if let Ok(pdr) = pd_res {
-            // send to cache
-            let req = self.cache.do_send(pdr);
         }
     }
 }
@@ -182,7 +130,6 @@ impl DbExecutor {
         let start_time = filters
             .start_time
             .unwrap_or_else(|| NaiveDateTime::from_timestamp(0, 0));
-        info!("Query start time: {}", &start_time);
         match self.with_connection(|conn| {
             let query = sql_query(
                 "SELECT sl.logs as log, \

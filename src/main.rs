@@ -39,7 +39,7 @@ use std::env;
 use std::time::Duration;
 
 use crate::db::models::NewSubstrateLog;
-use crate::db::peer_data::UpdateCache;
+//use crate::db::peer_data::UpdateCache;
 use crate::db::*;
 use actix::prelude::*;
 use actix_web::{middleware, App, HttpServer};
@@ -69,6 +69,7 @@ lazy_static! {
     pub static ref DATABASE_POOL_SIZE: u32 = parse_env("DATABASE_POOL_SIZE").unwrap_or(*NUM_THREADS as u32);
     pub static ref DB_BATCH_SIZE: usize = parse_env("DB_BATCH_SIZE").unwrap_or(1024);
     pub static ref DB_SAVE_LATENCY_MS: Duration = Duration::from_millis(parse_env("DB_SAVE_LATENCY_MS").unwrap_or(100));
+    pub static ref CACHE_UPDATE_TIMEOUT: Duration = Duration::from_secs(parse_env("CACHE_UPDATE_TIMEOUT").unwrap_or(15));
 }
 
 struct LogBuffer {
@@ -107,7 +108,8 @@ impl Handler<db::peer_data::PeerDataResponse> for LogBuffer {
         _: &mut Self::Context,
     ) -> Self::Result {
         info!(
-            "Received PeerData from Cache - length: {:?}",
+            "Received PeerData {} from Cache - length: {:?}",
+            msg.peer_message,
             msg.data.len()
         );
         Ok(())
@@ -147,12 +149,12 @@ async fn main() -> std::io::Result<()> {
     info!("Creating database pool");
     let pool = create_pool();
     info!("Starting DbArbiter with {} threads", *NUM_THREADS);
-    let mut cache = Cache::new().start();
-    let db_cache = cache.clone();
-    let db_arbiter = SyncArbiter::start(*NUM_THREADS, move || {
-        db::DbExecutor::new(pool.clone(), db_cache.clone())
-    });
+
+    let db_arbiter = SyncArbiter::start(*NUM_THREADS, move || db::DbExecutor::new(pool.clone()));
     info!("DbExecutor started");
+
+    let refresh_interval = Duration::from_millis(1000);
+    let mut cache = Cache::new(refresh_interval, db_arbiter.clone()).start();
 
     let log_buffer = LogBuffer {
         logs: Vec::new(),
@@ -173,14 +175,26 @@ async fn main() -> std::io::Result<()> {
     let start_time =
         chrono::NaiveDateTime::from_timestamp((ds.as_secs() as u64).try_into().unwrap(), 0);
     let subscription = crate::cache::Subscription {
-        peer_id: "QmVtNxezF8fbMp4YmfnstZiTE8HBE8P3FTHYTn78XBqPLL".to_owned(),
+        peer_id: "QmRKJSmFKSBwF4jBdexmkrWQqfvQji6HruT8qyz2fDHCUC".to_owned(),
         msg: "system.interval".to_owned(),
+        subscriber_addr: recip.clone(),
+        start_time: None,
+        interest: crate::cache::Interest::Subscribe,
+    };
+    let subscription2 = crate::cache::Subscription {
+        peer_id: "QmRKJSmFKSBwF4jBdexmkrWQqfvQji6HruT8qyz2fDHCUC".to_owned(),
+        msg: "tracing.profiling".to_owned(),
         subscriber_addr: recip,
         start_time: None,
         interest: crate::cache::Interest::Subscribe,
     };
 
     match cache.send(subscription).await {
+        Ok(v) => info!("Sent subscription"),
+        Err(e) => error!("Could not send subscription due to: {:?}", e),
+    }
+
+    match cache.send(subscription2).await {
         Ok(v) => info!("Sent subscription"),
         Err(e) => error!("Could not send subscription due to: {:?}", e),
     }
@@ -194,12 +208,12 @@ async fn main() -> std::io::Result<()> {
     }
     .start();
 
-    util::PeriodicAction {
-        interval: Duration::from_millis(1000),
-        message: UpdateCache(db_arbiter.clone()),
-        recipient: db_arbiter.clone().recipient(),
-    }
-    .start();
+    //    util::PeriodicAction {
+    //        interval: Duration::from_millis(1000),
+    //        message: UpdateCache(db_arbiter.clone()),
+    //        recipient: db_arbiter.clone().recipient(),
+    //    }
+    //    .start();
 
     util::PeriodicAction {
         interval: *DB_SAVE_LATENCY_MS,
