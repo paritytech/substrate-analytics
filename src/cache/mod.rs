@@ -18,9 +18,8 @@ use crate::db;
 use crate::db::{
     filters::Filters,
     peer_data::{
-        create_date_time, PeerDataResponse, PeerMessage, PeerMessageStartTime,
-        PeerMessageStartTimeList, PeerMessageStartTimeRequest, PeerMessages, SubscriberInfo,
-        SubstrateLog,
+        create_date_time, PeerDataResponse, PeerMessage, PeerMessageStartTimeRequest,
+        PeerMessageTime, PeerMessageTimeList, PeerMessages, SubstrateLog,
     },
     DbExecutor,
 };
@@ -61,7 +60,7 @@ impl Cache {
         ret
     }
 
-    pub fn initialise_update(&mut self) -> Vec<PeerMessageStartTime> {
+    pub fn initialise_update(&mut self) -> Vec<PeerMessageTime> {
         let now = Instant::now();
         let ret = self
             .cache
@@ -69,9 +68,9 @@ impl Cache {
             .filter_map(|(pm, pmc)| {
                 if let None = pmc.started_update {
                     pmc.started_update = Some(now.clone());
-                    Some(PeerMessageStartTime {
+                    Some(PeerMessageTime {
                         peer_message: pm.to_owned(),
-                        last_accessed: pmc.last_updated.to_owned(),
+                        time: pmc.last_updated.to_owned(),
                     })
                 } else {
                     None
@@ -93,7 +92,7 @@ impl Cache {
 /// - Cleaning out data when it's older than `LOG_EXPIRY_HOURS`
 pub struct Cache {
     cache: HashMap<PeerMessage, PeerMessageCache>,
-    subscribers: HashMap<Recipient<PeerDataResponse>, SubscriberInfo>,
+    subscribers: HashMap<Recipient<PeerDataResponse>, PeerMessages>,
     refresh_interval: Duration,
     db_arbiter: Addr<DbExecutor>,
 }
@@ -151,7 +150,7 @@ impl Cache {
         if pmsts.is_empty() {
             return;
         }
-        let pmstl = PeerMessageStartTimeList {
+        let pmstl = PeerMessageTimeList {
             list: pmsts,
             cache: ctx.address().recipient::<PeerDataResponse>(),
         };
@@ -207,32 +206,32 @@ impl Cache {
             .cache
             .get_mut(&msg.peer_message)
             .expect("Already checked in updates_in_progress()");
-        let peer_message = msg.peer_message;
+        let peer_message = msg.peer_message.clone();
         let mut vpd = msg.data;
         // TODO Is there any possibility that we append duplicate data?
         peer_data.deque.append(&mut vpd[..].into());
+        // Probably unnecessary, TODO remove last_updated field, replace with method returning it
+        peer_data.last_updated = peer_data.deque.last().unwrap().created_at.to_owned();
         // Iterate through subscribers and send latest data based on their last_updated time
-        for (recipient, mut subscriber_info) in self.subscribers.iter_mut().filter(|(_, s)| {
-            s.peer_messages
-                .0
-                .iter()
-                .find(|x| x == &&peer_message)
-                .is_some()
-        }) {
+        for (recipient, mut peer_messages) in self
+            .subscribers
+            .iter_mut()
+            .filter(|(_, s)| s.0.iter().find(|(p, _)| p == &&peer_message).is_some())
+        {
             //
-            debug!("SubscriberInfo: {:?}", &subscriber_info);
+            //            debug!("Subscriber PeerMessages: {:?}", &peer_messages);
+            let mut pmt = peer_messages
+                .0
+                .get_mut(&msg.peer_message)
+                .expect("Must not be modified anywhere else");
             let idx = match peer_data
                 .deque
-                .binary_search_by(|item| item.created_at.cmp(&subscriber_info.last_updated))
+                .binary_search_by(|item| item.created_at.cmp(&pmt))
             {
                 Ok(n) => n + 1,
                 _ => 0,
             };
-            dbg!(&idx);
-            //            if idx == 0 {
-            //                dbg!(&subscriber_info.last_updated);
-            //                dbg!(&peer_data.deque);
-            //            }
+            //            dbg!(&idx);
             let response_data = peer_data.deque[idx..].to_vec();
             let pdr = PeerDataResponse {
                 peer_message: peer_message.clone(),
@@ -241,13 +240,12 @@ impl Cache {
             if let Err(e) = recipient.try_send(pdr) {
                 error!("Unable to send PeerDataResponse: {:?}", e);
             } else {
-                peer_data.last_updated = peer_data.deque.last().unwrap().created_at.to_owned();
-                subscriber_info.last_updated = peer_data.last_updated.clone();
+                *pmt = peer_data.last_updated.clone();
                 trace!(
                     "SubscriberInfo for ({:?}) - {:?} last updated: {}",
                     recipient,
-                    subscriber_info.peer_messages,
-                    subscriber_info.last_updated,
+                    msg.peer_message,
+                    pmt,
                 );
             }
         }
@@ -316,16 +314,20 @@ impl Cache {
         subscriber_addr: Recipient<PeerDataResponse>,
         start_time: Option<NaiveDateTime>,
     ) {
-        let mut subscriber = self
-            .subscribers
-            .entry(subscriber_addr)
-            .or_insert(SubscriberInfo::new());
+        let last_updated = start_time.unwrap_or(create_date_time(0));
         let peer_message = PeerMessage {
             peer_id: peer_id.clone(),
             msg: msg.to_owned(),
         };
-        subscriber.peer_messages.0.insert(peer_message.clone());
-        self.subscribe_msgs(peer_message, start_time);
+
+        self.subscribe_msgs(peer_message.clone(), start_time);
+
+        let mut peer_messages = self
+            .subscribers
+            .entry(subscriber_addr)
+            .or_insert(PeerMessages(HashMap::new()))
+            .0
+            .insert(peer_message, last_updated);
     }
 
     pub fn unsubscribe(
@@ -334,25 +336,33 @@ impl Cache {
         msg: String,
         subscriber_addr: Recipient<PeerDataResponse>,
     ) {
-        let mut subscriber = self
-            .subscribers
-            .entry(subscriber_addr)
-            .or_insert(SubscriberInfo::new());
-        let peer_message = PeerMessage {
-            peer_id: peer_id.clone(),
-            msg: msg.to_owned(),
-        };
-        subscriber.peer_messages.0.remove(&peer_message);
+        if let Some(mut peer_messages) = self.subscribers.get_mut(&subscriber_addr) {
+            let peer_message = PeerMessage {
+                peer_id: peer_id.clone(),
+                msg: msg.to_owned(),
+            };
+            peer_messages.0.remove(&peer_message);
+        }
     }
 
     fn subscribe_msgs(&mut self, peer_message: PeerMessage, start_time: Option<NaiveDateTime>) {
+        use std::collections::hash_map::Entry;
         let last_updated = start_time.unwrap_or(create_date_time(0));
         // Set last accessed now, otherwise could be missed if subscriber is closed before accessed
-        self.cache.entry(peer_message).or_insert(PeerMessageCache {
-            deque: SliceDeque::new(),
-            last_updated,
-            started_update: None,
-        });
+        match self.cache.entry(peer_message) {
+            Entry::Occupied(mut o) => {
+                if o.get().last_updated > last_updated {
+                    o.get_mut().last_updated = last_updated;
+                }
+            }
+            Entry::Vacant(v) => {
+                v.insert(PeerMessageCache {
+                    deque: SliceDeque::new(),
+                    last_updated,
+                    started_update: None,
+                });
+            }
+        }
     }
 }
 

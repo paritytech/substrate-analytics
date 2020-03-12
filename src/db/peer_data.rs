@@ -19,13 +19,12 @@ use chrono::{NaiveDateTime, Utc};
 use diesel::sql_types::*;
 use diesel::{result::QueryResult, sql_query, RunQueryDsl};
 use serde_json::Value;
-use std::collections::HashSet;
+use std::collections::HashMap;
 use std::convert::TryInto;
 use std::hash::{Hash, Hasher};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use super::{filters::Filters, DbExecutor, RECORD_LIMIT};
-//use futures::{FutureExt, TryFutureExt};
 
 #[derive(Serialize, Deserialize, QueryableByName, Clone, Debug)]
 pub struct SubstrateLog {
@@ -51,62 +50,40 @@ pub struct PeerMessage {
     pub msg: String,
 }
 
-impl std::fmt::Display for PeerMessage {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "({}, {})", self.peer_id, self.msg)
-    }
-}
-
-#[derive(Debug)]
-pub struct PeerMessages(pub HashSet<PeerMessage>);
+pub struct PeerMessages(pub HashMap<PeerMessage, NaiveDateTime>);
 
 #[derive(Clone, Debug)]
-pub struct PeerMessageStartTime {
+pub struct PeerMessageTime {
     pub peer_message: PeerMessage,
-    pub last_accessed: NaiveDateTime,
-}
-
-#[derive(Debug)]
-pub struct SubscriberInfo {
-    pub peer_messages: PeerMessages,
-    pub last_updated: NaiveDateTime,
-}
-
-impl SubscriberInfo {
-    pub fn new() -> Self {
-        SubscriberInfo {
-            peer_messages: PeerMessages(HashSet::new()),
-            last_updated: create_date_time(0),
-        }
-    }
+    pub time: NaiveDateTime,
 }
 
 pub struct PeerMessageStartTimeRequest(pub Addr<crate::cache::Cache>);
 
 impl Message for PeerMessageStartTimeRequest {
-    type Result = Result<PeerMessageStartTimeList, &'static str>;
+    type Result = Result<PeerMessageTimeList, &'static str>;
 }
 
 #[derive(Debug)]
-pub struct PeerMessageStartTimeList {
-    pub list: Vec<PeerMessageStartTime>,
+pub struct PeerMessageTimeList {
+    pub list: Vec<PeerMessageTime>,
     pub cache: Recipient<PeerDataResponse>,
 }
 
-impl Message for PeerMessageStartTimeList {
+impl Message for PeerMessageTimeList {
     type Result = ();
 }
 
-impl Handler<PeerMessageStartTimeList> for DbExecutor {
+impl Handler<PeerMessageTimeList> for DbExecutor {
     type Result = ();
-    fn handle(&mut self, msg: PeerMessageStartTimeList, ctx: &mut Self::Context) -> Self::Result {
+    fn handle(&mut self, msg: PeerMessageTimeList, ctx: &mut Self::Context) -> Self::Result {
         debug!("Handling PeerMessageStartTimeList");
         let cache = msg.cache;
         let pmuts = msg.list;
         for pmut in pmuts {
             let p = pmut.clone();
             let filters = Filters {
-                start_time: Some(p.last_accessed),
+                start_time: Some(p.time),
                 peer_id: Some(p.peer_message.peer_id),
                 msg: Some(p.peer_message.msg),
                 ..Default::default()
@@ -172,4 +149,10 @@ pub fn create_date_time(seconds_ago: u64) -> NaiveDateTime {
         .duration_since(UNIX_EPOCH)
         .expect("We should be using sane values for default_start_time");
     NaiveDateTime::from_timestamp((ds.as_secs() as u64).try_into().unwrap(), 0)
+}
+
+impl std::fmt::Display for PeerMessage {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "({}, {})", self.peer_id, self.msg)
+    }
 }
