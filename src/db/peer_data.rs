@@ -15,13 +15,13 @@
 // along with Substrate Analytics.  If not, see <http://www.gnu.org/licenses/>.
 
 use actix::prelude::*;
-use chrono::{NaiveDateTime, Utc};
+use chrono::NaiveDateTime;
 use diesel::sql_types::*;
 use diesel::{result::QueryResult, sql_query, RunQueryDsl};
 use serde_json::Value;
 use std::collections::HashMap;
 use std::convert::TryInto;
-use std::hash::{Hash, Hasher};
+use std::hash::Hash;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use super::{filters::Filters, DbExecutor, RECORD_LIMIT};
@@ -57,13 +57,6 @@ pub struct PeerMessageTime {
     pub peer_message: PeerMessage,
     pub time: NaiveDateTime,
 }
-
-pub struct PeerMessageStartTimeRequest(pub Addr<crate::cache::Cache>);
-
-impl Message for PeerMessageStartTimeRequest {
-    type Result = Result<PeerMessageTimeList, &'static str>;
-}
-
 #[derive(Debug)]
 pub struct PeerMessageTimeList {
     pub list: Vec<PeerMessageTime>,
@@ -76,7 +69,7 @@ impl Message for PeerMessageTimeList {
 
 impl Handler<PeerMessageTimeList> for DbExecutor {
     type Result = ();
-    fn handle(&mut self, msg: PeerMessageTimeList, ctx: &mut Self::Context) -> Self::Result {
+    fn handle(&mut self, msg: PeerMessageTimeList, _ctx: &mut Self::Context) -> Self::Result {
         debug!("Handling PeerMessageStartTimeList");
         let cache = msg.cache;
         let pmuts = msg.list;

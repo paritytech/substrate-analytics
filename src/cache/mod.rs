@@ -14,28 +14,20 @@
 // You should have received a copy of the GNU General Public License
 // along with Substrate Analytics.  If not, see <http://www.gnu.org/licenses/>.
 
-use crate::db;
 use crate::db::{
-    filters::Filters,
     peer_data::{
-        create_date_time, PeerDataResponse, PeerMessage, PeerMessageStartTimeRequest,
-        PeerMessageTime, PeerMessageTimeList, PeerMessages, SubstrateLog,
+        create_date_time, PeerDataResponse, PeerMessage, PeerMessageTime, PeerMessageTimeList,
+        PeerMessages, SubstrateLog,
     },
     DbExecutor,
 };
-use crate::CACHE_UPDATE_TIMEOUT;
+use crate::{CACHE_UPDATE_INTERVAL_MS, CACHE_UPDATE_TIMEOUT_S, LOG_EXPIRY_HOURS, PURGE_INTERVAL_S};
 use actix::prelude::*;
-use chrono::{NaiveDateTime, Utc};
-use diesel::sql_types::*;
-use diesel::{result::QueryResult, sql_query, RunQueryDsl};
-use failure::Error;
-use futures::future::join_all;
+use chrono::NaiveDateTime;
 use futures::FutureExt;
-use serde_json::Value;
 use slice_deque::SliceDeque;
-use std::collections::{HashMap, HashSet};
-use std::hash::{Hash, Hasher};
-use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
+use std::collections::HashMap;
+use std::time::Instant;
 
 #[derive(Debug)]
 pub struct PeerMessageCache {
@@ -93,16 +85,14 @@ impl Cache {
 pub struct Cache {
     cache: HashMap<PeerMessage, PeerMessageCache>,
     subscribers: HashMap<Recipient<PeerDataResponse>, PeerMessages>,
-    refresh_interval: Duration,
     db_arbiter: Addr<DbExecutor>,
 }
 
 impl Cache {
-    pub fn new(refresh_interval: Duration, db_arbiter: Addr<DbExecutor>) -> Cache {
+    pub fn new(db_arbiter: Addr<DbExecutor>) -> Cache {
         Cache {
             cache: HashMap::new(),
             subscribers: HashMap::new(),
-            refresh_interval,
             db_arbiter,
         }
     }
@@ -112,8 +102,13 @@ impl Actor for Cache {
     type Context = Context<Self>;
 
     fn started(&mut self, ctx: &mut Context<Self>) {
-        ctx.run_interval(self.refresh_interval, |act, ctx| {
+        // Start update cycle
+        ctx.run_interval(*CACHE_UPDATE_INTERVAL_MS, |act, ctx| {
             act.request_updates(ctx);
+        });
+        // Start purge cycle
+        ctx.run_interval(*PURGE_INTERVAL_S, |act, _ctx| {
+            act.purge_expired();
         });
     }
 }
@@ -126,14 +121,14 @@ impl Cache {
         let now = Instant::now();
         for (peer_message, started) in self.updates_in_progress() {
             let dur = now - started;
-            if dur > *CACHE_UPDATE_TIMEOUT {
+            if dur > *CACHE_UPDATE_TIMEOUT_S {
                 warn!(
                     "Cache update timeout exceeded (running: {} s) for {} {}",
                     dur.as_secs_f32(),
                     peer_message.peer_id,
                     peer_message.msg
                 );
-                if dur > *CACHE_UPDATE_TIMEOUT * 4 {
+                if dur > *CACHE_UPDATE_TIMEOUT_S * 4 {
                     warn!(
                         "Cache update timeout exceeded (running: {} s) for {} {}, dropping update...",
                         dur.as_secs_f32(),
@@ -163,6 +158,22 @@ impl Cache {
         });
         ctx.wait(actix::fut::wrap_future::<_, Self>(fut));
     }
+
+    fn purge_expired(&mut self) {
+        let expiry_time = create_date_time((3600 * *LOG_EXPIRY_HOURS).into());
+        dbg!(&expiry_time);
+        for (_, pmc) in &mut self.cache {
+            let idx: i64 = match pmc
+                .deque
+                .binary_search_by(|item| item.created_at.cmp(&expiry_time))
+            {
+                Ok(n) => (n + 1) as i64,
+                _ => 1,
+            };
+            let new_len = (pmc.deque.len() as i64 - idx) as usize;
+            pmc.deque.truncate(new_len);
+        }
+    }
 }
 
 impl Handler<PeerDataResponse> for Cache {
@@ -180,20 +191,14 @@ impl Cache {
         // Check that we are expecting this update
         if updates_in_progress
             .iter()
-            .find(|(pm, _)| {
-                let same = pm == &msg.peer_message;
-                same
-            })
+            .find(|(pm, _)| pm == &msg.peer_message)
             .is_none()
         {
             warn!("Received PeerDataResponse for PeerMessage we no longer have a cache for, or updated already.");
             return;
         }
-        // Flag this cache as no longer expecting update
-        let started_update = match self.cache.get_mut(&msg.peer_message) {
-            Some(p) => p.started_update.take(),
-            _ => None,
-        };
+        // Take started_update to flag that this cache as no longer expecting update
+        let started_update = self.take_started_update(&msg.peer_message);
         // Make sure data is not empty
         let len = msg.data.len();
         debug!("PeerDataResponse {} length = {}", msg.peer_message, len);
@@ -201,7 +206,6 @@ impl Cache {
             return;
         }
         // Update cache
-        let mut pd = self.cache.get_mut(&msg.peer_message);
         let mut peer_data = self
             .cache
             .get_mut(&msg.peer_message)
@@ -213,14 +217,15 @@ impl Cache {
         // Probably unnecessary, TODO remove last_updated field, replace with method returning it
         peer_data.last_updated = peer_data.deque.last().unwrap().created_at.to_owned();
         // Iterate through subscribers and send latest data based on their last_updated time
-        for (recipient, mut peer_messages) in self
+        // Can be optimised for usual best case with fallback to binary_search
+        for (recipient, peer_messages) in self
             .subscribers
             .iter_mut()
             .filter(|(_, s)| s.0.iter().find(|(p, _)| p == &&peer_message).is_some())
         {
             //
             //            debug!("Subscriber PeerMessages: {:?}", &peer_messages);
-            let mut pmt = peer_messages
+            let pmt = peer_messages
                 .0
                 .get_mut(&msg.peer_message)
                 .expect("Must not be modified anywhere else");
@@ -249,24 +254,22 @@ impl Cache {
                 );
             }
         }
-        // TODO refactor this
-        match started_update {
-            Some(s) => {
-                let dur = Instant::now() - s;
-                debug!(
-                    "Cache update cycle for {} took: {} seconds",
-                    peer_message,
-                    dur.as_secs_f32()
-                );
-            }
-            _ => warn!("Should be unreachable"),
-        }
+        let dur = Instant::now() - started_update;
+        debug!(
+            "Cache update cycle for {} took: {} seconds",
+            peer_message,
+            dur.as_secs_f32()
+        );
     }
-}
 
-// TODO
-impl Message for PeerMessages {
-    type Result = ();
+    fn take_started_update(&mut self, peer_message: &PeerMessage) -> Instant {
+        self.cache
+            .get_mut(peer_message)
+            .expect("Already checked that this cache is expecting update")
+            .started_update
+            .take()
+            .expect("Already checked that this cache is expecting update")
+    }
 }
 
 #[derive(Debug)]
@@ -291,7 +294,7 @@ impl Message for Subscription {
 impl Handler<Subscription> for Cache {
     type Result = Result<(), ()>;
 
-    fn handle(&mut self, msg: Subscription, ctx: &mut Self::Context) -> Self::Result {
+    fn handle(&mut self, msg: Subscription, _ctx: &mut Self::Context) -> Self::Result {
         info!("Received subscription: {:?}", &msg);
         match &msg.interest {
             Interest::Subscribe => {
@@ -322,8 +325,7 @@ impl Cache {
 
         self.subscribe_msgs(peer_message.clone(), start_time);
 
-        let mut peer_messages = self
-            .subscribers
+        self.subscribers
             .entry(subscriber_addr)
             .or_insert(PeerMessages(HashMap::new()))
             .0
@@ -336,7 +338,7 @@ impl Cache {
         msg: String,
         subscriber_addr: Recipient<PeerDataResponse>,
     ) {
-        if let Some(mut peer_messages) = self.subscribers.get_mut(&subscriber_addr) {
+        if let Some(peer_messages) = self.subscribers.get_mut(&subscriber_addr) {
             let peer_message = PeerMessage {
                 peer_id: peer_id.clone(),
                 msg: msg.to_owned(),
@@ -372,11 +374,16 @@ mod tests {
     use actix_web::test;
     use dotenv::dotenv;
     use std::env;
+    use std::sync::RwLock;
 
     fn get_test_setup() -> Cache {
-        let pool = db::create_pool();
-        let db_arbiter = SyncArbiter::start(1, move || db::DbExecutor::new(pool.clone()));
-        Cache::new(Duration::from_secs(2), db_arbiter.clone())
+        lazy_static! {
+            pub static ref POOL: RwLock<diesel::r2d2::Pool<diesel::r2d2::ConnectionManager<diesel::PgConnection>>> =
+                RwLock::new(crate::db::create_pool());
+        }
+        let pool = POOL.read().unwrap().to_owned();
+        let db_arbiter = SyncArbiter::start(1, move || DbExecutor::new(pool.clone()));
+        Cache::new(db_arbiter.clone())
     }
 
     fn add_cache_entries(cache: &mut Cache) {
@@ -402,7 +409,7 @@ mod tests {
         cache.cache.insert(k, v);
     }
 
-    fn generate_peer_Data_response1() -> PeerDataResponse {
+    fn generate_peer_data_response1() -> PeerDataResponse {
         PeerDataResponse {
             peer_message: PeerMessage {
                 peer_id: "Peer 1".to_string(),
@@ -415,7 +422,7 @@ mod tests {
         }
     }
 
-    fn generate_peer_Data_response2() -> PeerDataResponse {
+    fn generate_peer_data_response2() -> PeerDataResponse {
         PeerDataResponse {
             peer_message: PeerMessage {
                 peer_id: "Peer 2".to_string(),
@@ -439,7 +446,7 @@ mod tests {
         }
         let n_updating = cache.initialise_update().len();
         assert_eq!(n_updating, 2);
-        for (pm, pmc) in &cache.cache {
+        for (_pm, pmc) in &cache.cache {
             assert!(pmc.started_update.is_some());
         }
     }
@@ -452,7 +459,7 @@ mod tests {
         cache.initialise_update();
         let updates = cache.updates_in_progress();
         assert_eq!(updates.len(), 2);
-        for (pm, pmc) in &cache.cache {
+        for (_pm, pmc) in &cache.cache {
             assert!(pmc.started_update.is_some());
         }
     }
@@ -464,16 +471,50 @@ mod tests {
         add_cache_entries(&mut cache);
         cache.initialise_update();
         assert_eq!(cache.updates_in_progress().len(), 2);
-        cache.process_peer_data_response(generate_peer_Data_response1());
+        cache.process_peer_data_response(generate_peer_data_response1());
         assert_eq!(cache.updates_in_progress().len(), 1);
-        cache.process_peer_data_response(generate_peer_Data_response1());
+        cache.process_peer_data_response(generate_peer_data_response1());
         assert_eq!(cache.updates_in_progress().len(), 1);
-        cache.process_peer_data_response(generate_peer_Data_response2());
+        cache.process_peer_data_response(generate_peer_data_response2());
         assert_eq!(cache.updates_in_progress().len(), 0);
     }
 
     #[actix_rt::test]
     async fn cache_purges_expired_data_test() {
-        // TODO
+        dotenv().ok();
+        let mut cache = get_test_setup();
+        add_cache_entries(&mut cache);
+        let k = PeerMessage {
+            peer_id: "Peer 1".to_string(),
+            msg: "Message 1".to_string(),
+        };
+        let t1 = create_date_time(((*LOG_EXPIRY_HOURS * 3600) + 1).into());
+        let t2 = create_date_time(((*LOG_EXPIRY_HOURS * 3600) - 1).into());
+        dbg!(&t1);
+        dbg!(&t2);
+        let sl1 = SubstrateLog {
+            log: Default::default(),
+            created_at: t1,
+        };
+        let sl2 = SubstrateLog {
+            log: Default::default(),
+            created_at: t2,
+        };
+        cache
+            .cache
+            .get_mut(&k)
+            .unwrap()
+            .deque
+            .append(&mut vec![sl1][..].into());
+        cache
+            .cache
+            .get_mut(&k)
+            .unwrap()
+            .deque
+            .append(&mut vec![sl2][..].into());
+        dbg!(&cache.cache.get(&k).unwrap().deque);
+        assert_eq!(cache.cache.get(&k).unwrap().deque.len(), 2);
+        cache.purge_expired();
+        assert_eq!(cache.cache.get(&k).unwrap().deque.len(), 1);
     }
 }

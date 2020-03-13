@@ -56,7 +56,7 @@ lazy_static! {
     pub static ref CLIENT_TIMEOUT: Duration = Duration::from_secs(
         parse_env("CLIENT_TIMEOUT").unwrap_or(10)
     );
-    pub static ref PURGE_FREQUENCY: Duration = Duration::from_secs(
+    pub static ref PURGE_INTERVAL_S: Duration = Duration::from_secs(
         parse_env("PURGE_FREQUENCY").unwrap_or(600)
     );
     pub static ref LOG_EXPIRY_HOURS: u32 = parse_env("LOG_EXPIRY_HOURS").unwrap_or(3);
@@ -66,10 +66,13 @@ lazy_static! {
     pub static ref WS_MAX_PAYLOAD: usize = parse_env("WS_MAX_PAYLOAD").unwrap_or(524_288);
 
     pub static ref NUM_THREADS: usize = num_cpus::get() * 3;
+
     pub static ref DATABASE_POOL_SIZE: u32 = parse_env("DATABASE_POOL_SIZE").unwrap_or(*NUM_THREADS as u32);
     pub static ref DB_BATCH_SIZE: usize = parse_env("DB_BATCH_SIZE").unwrap_or(1024);
     pub static ref DB_SAVE_LATENCY_MS: Duration = Duration::from_millis(parse_env("DB_SAVE_LATENCY_MS").unwrap_or(100));
-    pub static ref CACHE_UPDATE_TIMEOUT: Duration = Duration::from_secs(parse_env("CACHE_UPDATE_TIMEOUT").unwrap_or(15));
+
+    pub static ref CACHE_UPDATE_TIMEOUT_S: Duration = Duration::from_secs(parse_env("CACHE_UPDATE_TIMEOUT").unwrap_or(15));
+    pub static ref CACHE_UPDATE_INTERVAL_MS: Duration = Duration::from_millis(parse_env("CACHE_UPDATE_TIMEOUT").unwrap_or(1000));
 }
 
 struct LogBuffer {
@@ -153,8 +156,7 @@ async fn main() -> std::io::Result<()> {
     let db_arbiter = SyncArbiter::start(*NUM_THREADS, move || db::DbExecutor::new(pool.clone()));
     info!("DbExecutor started");
 
-    let refresh_interval = Duration::from_millis(1000);
-    let mut cache = Cache::new(refresh_interval, db_arbiter.clone()).start();
+    let cache = Cache::new(db_arbiter.clone()).start();
 
     let log_buffer = LogBuffer {
         logs: Vec::new(),
@@ -164,25 +166,15 @@ async fn main() -> std::io::Result<()> {
 
     let recip: Recipient<db::peer_data::PeerDataResponse> = log_buffer.clone().recipient();
 
-    use std::convert::TryInto;
-    let now = std::time::SystemTime::now();
-    let ts = now
-        .checked_sub(Duration::from_secs(3600))
-        .expect("We should be using sane values for default_start_time");
-    let ds = ts
-        .duration_since(std::time::UNIX_EPOCH)
-        .expect("We should be using sane values for default_start_time");
-    let start_time =
-        chrono::NaiveDateTime::from_timestamp((ds.as_secs() as u64).try_into().unwrap(), 0);
     let subscription = crate::cache::Subscription {
-        peer_id: "QmRKJSmFKSBwF4jBdexmkrWQqfvQji6HruT8qyz2fDHCUC".to_owned(),
+        peer_id: "QmWEYMbwXTdtYXgHPJrKirnjndnSQgZ47re7LCL8dpo26Y".to_owned(),
         msg: "system.interval".to_owned(),
         subscriber_addr: recip.clone(),
         start_time: None,
         interest: crate::cache::Interest::Subscribe,
     };
     let subscription2 = crate::cache::Subscription {
-        peer_id: "QmRKJSmFKSBwF4jBdexmkrWQqfvQji6HruT8qyz2fDHCUC".to_owned(),
+        peer_id: "QmWEYMbwXTdtYXgHPJrKirnjndnSQgZ47re7LCL8dpo26Y".to_owned(),
         msg: "tracing.profiling".to_owned(),
         subscriber_addr: recip,
         start_time: None,
@@ -190,17 +182,17 @@ async fn main() -> std::io::Result<()> {
     };
 
     match cache.send(subscription).await {
-        Ok(v) => info!("Sent subscription"),
+        Ok(_) => info!("Sent subscription"),
         Err(e) => error!("Could not send subscription due to: {:?}", e),
     }
 
     match cache.send(subscription2).await {
-        Ok(v) => info!("Sent subscription"),
+        Ok(_) => info!("Sent subscription"),
         Err(e) => error!("Could not send subscription due to: {:?}", e),
     }
 
     util::PeriodicAction {
-        interval: *PURGE_FREQUENCY,
+        interval: *PURGE_INTERVAL_S,
         message: PurgeLogs {
             hours_valid: *LOG_EXPIRY_HOURS,
         },
@@ -254,7 +246,7 @@ fn log_statics() {
     info!("Configuration options:");
     info!("HEARTBEAT_INTERVAL = {:?}", *HEARTBEAT_INTERVAL);
     info!("CLIENT_TIMEOUT = {:?}", *CLIENT_TIMEOUT);
-    info!("PURGE_FREQUENCY = {:?}", *PURGE_FREQUENCY);
+    info!("PURGE_FREQUENCY = {:?}", *PURGE_INTERVAL_S);
     info!("LOG_EXPIRY_HOURS = {:?}", *LOG_EXPIRY_HOURS);
     info!("MAX_PENDING_CONNECTIONS = {:?}", *MAX_PENDING_CONNECTIONS);
     info!("DATABASE_POOL_SIZE = {:?}", *DATABASE_POOL_SIZE);
