@@ -101,24 +101,6 @@ impl Handler<NewSubstrateLog> for LogBuffer {
     }
 }
 
-//Temp test
-impl Handler<db::peer_data::PeerDataResponse> for LogBuffer {
-    type Result = Result<(), &'static str>;
-
-    fn handle(
-        &mut self,
-        msg: db::peer_data::PeerDataResponse,
-        _: &mut Self::Context,
-    ) -> Self::Result {
-        info!(
-            "Received PeerData {} from Cache - length: {:?}",
-            msg.peer_message,
-            msg.data.len()
-        );
-        Ok(())
-    }
-}
-
 #[derive(Clone)]
 struct SaveLogs;
 
@@ -164,33 +146,6 @@ async fn main() -> std::io::Result<()> {
     }
     .start();
 
-    let recip: Recipient<db::peer_data::PeerDataResponse> = log_buffer.clone().recipient();
-
-    let subscription = crate::cache::Subscription {
-        peer_id: "QmWEYMbwXTdtYXgHPJrKirnjndnSQgZ47re7LCL8dpo26Y".to_owned(),
-        msg: "system.interval".to_owned(),
-        subscriber_addr: recip.clone(),
-        start_time: None,
-        interest: crate::cache::Interest::Subscribe,
-    };
-    let subscription2 = crate::cache::Subscription {
-        peer_id: "QmWEYMbwXTdtYXgHPJrKirnjndnSQgZ47re7LCL8dpo26Y".to_owned(),
-        msg: "tracing.profiling".to_owned(),
-        subscriber_addr: recip,
-        start_time: None,
-        interest: crate::cache::Interest::Subscribe,
-    };
-
-    match cache.send(subscription).await {
-        Ok(_) => info!("Sent subscription"),
-        Err(e) => error!("Could not send subscription due to: {:?}", e),
-    }
-
-    match cache.send(subscription2).await {
-        Ok(_) => info!("Sent subscription"),
-        Err(e) => error!("Could not send subscription due to: {:?}", e),
-    }
-
     util::PeriodicAction {
         interval: *PURGE_INTERVAL_S,
         message: PurgeLogs {
@@ -199,13 +154,6 @@ async fn main() -> std::io::Result<()> {
         recipient: db_arbiter.clone().recipient(),
     }
     .start();
-
-    //    util::PeriodicAction {
-    //        interval: Duration::from_millis(1000),
-    //        message: UpdateCache(db_arbiter.clone()),
-    //        recipient: db_arbiter.clone().recipient(),
-    //    }
-    //    .start();
 
     util::PeriodicAction {
         interval: *DB_SAVE_LATENCY_MS,
@@ -222,6 +170,7 @@ async fn main() -> std::io::Result<()> {
             .data(db_arbiter.clone())
             .data(metrics.clone())
             .data(log_buffer.clone())
+            .data(cache.clone())
             .data(actix_web::web::JsonConfig::default().limit(4096))
             .wrap(middleware::NormalizePath)
             .wrap(middleware::Logger::default())

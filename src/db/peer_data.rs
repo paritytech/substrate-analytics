@@ -18,6 +18,7 @@ use actix::prelude::*;
 use chrono::NaiveDateTime;
 use diesel::sql_types::*;
 use diesel::{result::QueryResult, sql_query, RunQueryDsl};
+use serde::Serialize;
 use serde_json::Value;
 use std::collections::HashMap;
 use std::convert::TryInto;
@@ -34,7 +35,7 @@ pub struct SubstrateLog {
     pub created_at: NaiveDateTime,
 }
 
-#[derive(Debug)]
+#[derive(Serialize, Debug)]
 pub struct PeerDataResponse {
     pub peer_message: PeerMessage,
     pub data: Vec<SubstrateLog>,
@@ -44,7 +45,7 @@ impl Message for PeerDataResponse {
     type Result = Result<(), &'static str>;
 }
 
-#[derive(Hash, Eq, PartialEq, Clone, Debug)]
+#[derive(Hash, Serialize, Eq, PartialEq, Clone, Debug)]
 pub struct PeerMessage {
     pub peer_id: String,
     pub msg: String,

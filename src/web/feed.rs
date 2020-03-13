@@ -1,23 +1,30 @@
 use std::time::{Duration, Instant};
 
-use crate::cache;
-use crate::db::*;
+use crate::cache::Cache;
+use crate::db::peer_data::PeerDataResponse;
+use crate::db::DbExecutor;
 use actix::prelude::*;
 use actix_files as fs;
-use actix_web::{middleware, web, App, Error, HttpRequest, HttpResponse, HttpServer};
+use actix_web::{middleware, web, web::Data, App, Error, HttpRequest, HttpResponse, HttpServer};
 use actix_web_actors::ws;
 use chrono::NaiveDateTime;
+//use serde_json::json;
 
 const HEARTBEAT_INTERVAL: Duration = Duration::from_secs(5);
 const CLIENT_TIMEOUT: Duration = Duration::from_secs(10);
 
 pub fn configure(cfg: &mut actix_web::web::ServiceConfig) {
-    cfg.service(actix_web::web::scope("/streaming").route("", actix_web::web::get().to(ws_index)));
+    cfg.service(actix_web::web::scope("/feed").route("", actix_web::web::get().to(ws_index)));
 }
 
-async fn ws_index(r: HttpRequest, stream: web::Payload) -> Result<HttpResponse, Error> {
+async fn ws_index(
+    r: HttpRequest,
+    stream: web::Payload,
+    db: Data<Addr<DbExecutor>>,
+    cache: Data<Addr<Cache>>,
+) -> Result<HttpResponse, Error> {
     println!("{:?}", r);
-    let res = ws::start(WebSocket::new(), &r, stream);
+    let res = ws::start(WebSocket::new(db, cache), &r, stream);
     println!("{:?}", res);
     res
 }
@@ -25,6 +32,18 @@ async fn ws_index(r: HttpRequest, stream: web::Payload) -> Result<HttpResponse, 
 struct WebSocket {
     hb: Instant,
     last_logs: Option<NaiveDateTime>,
+    cache: Data<Addr<Cache>>,
+    db: Data<Addr<DbExecutor>>,
+}
+
+impl Handler<PeerDataResponse> for WebSocket {
+    type Result = Result<(), &'static str>;
+
+    fn handle(&mut self, msg: PeerDataResponse, ctx: &mut Self::Context) -> Self::Result {
+        use ws::Message::Text;
+        ctx.text(json!(msg).to_string());
+        Ok(())
+    }
 }
 
 impl Actor for WebSocket {
@@ -33,14 +52,7 @@ impl Actor for WebSocket {
     // Start heartbeat and updates on new connection
     fn started(&mut self, ctx: &mut Self::Context) {
         self.hb(ctx);
-        //        ctx.run_interval(Duration::from_secs(2), |_act, ctx| {
-        //            ctx.text(
-        //                ctx.wait(cache::get_latest(self.last_logs))
-        //                    .into()
-        //                    .unwrap()
-        //                    .to_string(),
-        //            );
-        //        });
+        self.test_subscribe(ctx);
     }
 }
 
@@ -68,30 +80,49 @@ impl StreamHandler<Result<ws::Message, ws::ProtocolError>> for WebSocket {
 }
 
 impl WebSocket {
-    fn new() -> Self {
+    fn new(db: Data<Addr<DbExecutor>>, cache: Data<Addr<Cache>>) -> Self {
         Self {
             hb: Instant::now(),
             last_logs: None,
+            cache,
+            db,
         }
     }
 
-    /// helper method that sends ping to client every second.
-    ///
-    /// also this method checks heartbeats from client
+    fn test_subscribe(&self, ctx: &mut <Self as Actor>::Context) {
+        let subscription = crate::cache::Subscription {
+            peer_id: "QmWrgWU55yCBPaffKmTRX7rZPEhvY4fu1TnEnn94zATvDv".to_owned(),
+            msg: "system.interval".to_owned(),
+            subscriber_addr: ctx.address().recipient(),
+            start_time: Some(crate::db::peer_data::create_date_time(60)),
+            interest: crate::cache::Interest::Subscribe,
+        };
+        let subscription2 = crate::cache::Subscription {
+            peer_id: "QmWrgWU55yCBPaffKmTRX7rZPEhvY4fu1TnEnn94zATvDv".to_owned(),
+            msg: "tracing.profiling".to_owned(),
+            subscriber_addr: ctx.address().recipient(),
+            start_time: Some(crate::db::peer_data::create_date_time(60)),
+            interest: crate::cache::Interest::Subscribe,
+        };
+
+        match self.cache.try_send(subscription) {
+            Ok(_) => info!("Sent subscription"),
+            Err(e) => error!("Could not send subscription due to: {:?}", e),
+        }
+
+        match self.cache.try_send(subscription2) {
+            Ok(_) => info!("Sent subscription"),
+            Err(e) => error!("Could not send subscription due to: {:?}", e),
+        }
+    }
+
     fn hb(&self, ctx: &mut <Self as Actor>::Context) {
         ctx.run_interval(HEARTBEAT_INTERVAL, |act, ctx| {
-            // check client heartbeats
             if Instant::now().duration_since(act.hb) > CLIENT_TIMEOUT {
-                // heartbeat timed out
-                println!("Websocket Client heartbeat failed, disconnecting!");
-
-                // stop actor
+                info!("Websocket Client heartbeat failed, disconnecting!");
                 ctx.stop();
-
-                // don't try to send a ping
                 return;
             }
-
             ctx.ping(b"");
         });
     }
