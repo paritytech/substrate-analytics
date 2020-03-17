@@ -134,7 +134,7 @@ impl DbExecutor {
     }
 }
 
-pub fn create_date_time(seconds_ago: u64) -> NaiveDateTime {
+pub fn time_secs_ago(seconds_ago: u64) -> NaiveDateTime {
     let now = SystemTime::now();
     let ts = now
         .checked_sub(Duration::from_secs(seconds_ago))

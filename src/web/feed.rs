@@ -1,6 +1,6 @@
 use std::time::{Duration, Instant};
 
-use crate::cache::Cache;
+use crate::cache::{Cache, Interest, Subscription};
 use crate::db::peer_data::PeerDataResponse;
 use crate::db::DbExecutor;
 use actix::prelude::*;
@@ -8,6 +8,7 @@ use actix_files as fs;
 use actix_web::{middleware, web, web::Data, App, Error, HttpRequest, HttpResponse, HttpServer};
 use actix_web_actors::ws;
 use chrono::NaiveDateTime;
+use serde_json::Value;
 //use serde_json::json;
 
 const HEARTBEAT_INTERVAL: Duration = Duration::from_secs(5);
@@ -23,10 +24,7 @@ async fn ws_index(
     db: Data<Addr<DbExecutor>>,
     cache: Data<Addr<Cache>>,
 ) -> Result<HttpResponse, Error> {
-    println!("{:?}", r);
-    let res = ws::start(WebSocket::new(db, cache), &r, stream);
-    println!("{:?}", res);
-    res
+    ws::start(WebSocket::new(db, cache), &r, stream)
 }
 
 struct WebSocket {
@@ -52,15 +50,12 @@ impl Actor for WebSocket {
     // Start heartbeat and updates on new connection
     fn started(&mut self, ctx: &mut Self::Context) {
         self.hb(ctx);
-        self.test_subscribe(ctx);
     }
 }
 
 /// Handler for `ws::Message`
 impl StreamHandler<Result<ws::Message, ws::ProtocolError>> for WebSocket {
     fn handle(&mut self, msg: Result<ws::Message, ws::ProtocolError>, ctx: &mut Self::Context) {
-        // process websocket messages
-        println!("WS: {:?}", msg);
         match msg {
             Ok(ws::Message::Ping(msg)) => {
                 self.hb = Instant::now();
@@ -69,8 +64,13 @@ impl StreamHandler<Result<ws::Message, ws::ProtocolError>> for WebSocket {
             Ok(ws::Message::Pong(_)) => {
                 self.hb = Instant::now();
             }
-            Ok(ws::Message::Text(text)) => ctx.text(text),
-            Ok(ws::Message::Binary(bin)) => ctx.binary(bin),
+            Ok(ws::Message::Text(text)) => {
+                if let Err(e) = self.process_message(text, ctx) {
+                    trace!("Unable to decode message: {}", e);
+                    ctx.text(e);
+                }
+            }
+            Ok(ws::Message::Binary(bin)) => (),
             Ok(ws::Message::Close(_)) => {
                 ctx.stop();
             }
@@ -89,31 +89,48 @@ impl WebSocket {
         }
     }
 
-    fn test_subscribe(&self, ctx: &mut <Self as Actor>::Context) {
-        let subscription = crate::cache::Subscription {
-            peer_id: "QmWrgWU55yCBPaffKmTRX7rZPEhvY4fu1TnEnn94zATvDv".to_owned(),
-            msg: "system.interval".to_owned(),
-            subscriber_addr: ctx.address().recipient(),
-            start_time: Some(crate::db::peer_data::create_date_time(60)),
-            interest: crate::cache::Interest::Subscribe,
-        };
-        let subscription2 = crate::cache::Subscription {
-            peer_id: "QmWrgWU55yCBPaffKmTRX7rZPEhvY4fu1TnEnn94zATvDv".to_owned(),
-            msg: "tracing.profiling".to_owned(),
-            subscriber_addr: ctx.address().recipient(),
-            start_time: Some(crate::db::peer_data::create_date_time(60)),
-            interest: crate::cache::Interest::Subscribe,
-        };
-
-        match self.cache.try_send(subscription) {
-            Ok(_) => info!("Sent subscription"),
-            Err(e) => error!("Could not send subscription due to: {:?}", e),
+    fn process_message(
+        &self,
+        text: String,
+        ctx: &mut <Self as Actor>::Context,
+    ) -> Result<(), &'static str> {
+        if let Ok(j) = serde_json::from_str::<Value>(&text) {
+            let peer_id: String = j["peer_id"]
+                .as_str()
+                .ok_or("`peer_id` not found")?
+                .to_owned();
+            let msg = j["msg"].as_str().ok_or("`msg` not found")?.to_owned();
+            let mut start_time: Option<NaiveDateTime> = None;
+            let interest = match j["interest"].as_str().ok_or("`interest` not found")? {
+                "subscribe" => {
+                    start_time = Some(
+                        j["start_time"]
+                            .as_str()
+                            .ok_or("`start_time` not found")?
+                            .parse::<NaiveDateTime>()
+                            .map_err(|_| "unable to parse `start_time`")?,
+                    );
+                    Interest::Subscribe
+                }
+                "unsubscribe" => Interest::Unsubscribe,
+                _ => return Err("`interest` must be either `subscribe` or `unsubscribe`"),
+            };
+            let subscription = Subscription {
+                peer_id,
+                msg,
+                subscriber_addr: ctx.address().recipient(),
+                start_time,
+                interest,
+            };
+            match self.cache.try_send(subscription) {
+                Ok(_) => debug!("Sent subscription"),
+                Err(e) => {
+                    error!("Could not send subscription due to: {:?}", e);
+                    return Err("Internal server error");
+                }
+            }
         }
-
-        match self.cache.try_send(subscription2) {
-            Ok(_) => info!("Sent subscription"),
-            Err(e) => error!("Could not send subscription due to: {:?}", e),
-        }
+        Ok(())
     }
 
     fn hb(&self, ctx: &mut <Self as Actor>::Context) {

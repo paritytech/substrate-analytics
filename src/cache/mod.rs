@@ -16,12 +16,12 @@
 
 use crate::db::{
     peer_data::{
-        create_date_time, PeerDataResponse, PeerMessage, PeerMessageTime, PeerMessageTimeList,
+        time_secs_ago, PeerDataResponse, PeerMessage, PeerMessageTime, PeerMessageTimeList,
         PeerMessages, SubstrateLog,
     },
     DbExecutor,
 };
-use crate::{CACHE_UPDATE_INTERVAL_MS, CACHE_UPDATE_TIMEOUT_S, LOG_EXPIRY_HOURS, PURGE_INTERVAL_S};
+use crate::{CACHE_EXPIRY_S, CACHE_UPDATE_INTERVAL_MS, CACHE_UPDATE_TIMEOUT_S, PURGE_INTERVAL_S};
 use actix::prelude::*;
 use chrono::NaiveDateTime;
 use futures::FutureExt;
@@ -38,8 +38,7 @@ pub struct PeerMessageCache {
 
 impl Cache {
     pub fn updates_in_progress(&self) -> Vec<(PeerMessage, Instant)> {
-        let ret = self
-            .cache
+        self.cache
             .iter()
             .filter_map(|(pm, pmc)| {
                 if let Some(instant) = pmc.started_update {
@@ -48,14 +47,12 @@ impl Cache {
                     None
                 }
             })
-            .collect();
-        ret
+            .collect()
     }
 
     pub fn initialise_update(&mut self) -> Vec<PeerMessageTime> {
         let now = Instant::now();
-        let ret = self
-            .cache
+        self.cache
             .iter_mut()
             .filter_map(|(pm, pmc)| {
                 if let None = pmc.started_update {
@@ -68,8 +65,7 @@ impl Cache {
                     None
                 }
             })
-            .collect();
-        ret
+            .collect()
     }
 }
 
@@ -81,7 +77,7 @@ impl Cache {
 ///
 /// - Receiving updates to the cache
 ///
-/// - Cleaning out data when it's older than `LOG_EXPIRY_HOURS`
+/// - Cleaning out data when it's older than `CACHE_EXPIRY_S`
 pub struct Cache {
     cache: HashMap<PeerMessage, PeerMessageCache>,
     subscribers: HashMap<Recipient<PeerDataResponse>, PeerMessages>,
@@ -160,15 +156,14 @@ impl Cache {
     }
 
     fn purge_expired(&mut self) {
-        let expiry_time = create_date_time((3600 * *LOG_EXPIRY_HOURS).into());
-        dbg!(&expiry_time);
+        let expiry_time = time_secs_ago((*CACHE_EXPIRY_S).into());
         for (_, pmc) in &mut self.cache {
             let idx: i64 = match pmc
                 .deque
                 .binary_search_by(|item| item.created_at.cmp(&expiry_time))
             {
-                Ok(n) => (n + 1) as i64,
-                _ => 1,
+                Ok(n) => n as i64,
+                _ => 0,
             };
             let new_len = (pmc.deque.len() as i64 - idx) as usize;
             pmc.deque.truncate(new_len);
@@ -218,6 +213,7 @@ impl Cache {
         peer_data.last_updated = peer_data.deque.last().unwrap().created_at.to_owned();
         // Iterate through subscribers and send latest data based on their last_updated time
         // Can be optimised for usual best case with fallback to binary_search
+        let mut dead = Vec::new();
         for (recipient, peer_messages) in self
             .subscribers
             .iter_mut()
@@ -236,7 +232,6 @@ impl Cache {
                 Ok(n) => n + 1,
                 _ => 0,
             };
-            //            dbg!(&idx);
             let response_data = peer_data.deque[idx..].to_vec();
             let pdr = PeerDataResponse {
                 peer_message: peer_message.clone(),
@@ -244,6 +239,7 @@ impl Cache {
             };
             if let Err(e) = recipient.try_send(pdr) {
                 error!("Unable to send PeerDataResponse: {:?}", e);
+                dead.push(recipient.to_owned());
             } else {
                 *pmt = peer_data.last_updated.clone();
                 trace!(
@@ -253,6 +249,9 @@ impl Cache {
                     pmt,
                 );
             }
+        }
+        for r in dead {
+            self.subscribers.remove(&r);
         }
         let dur = Instant::now() - started_update;
         debug!(
@@ -309,7 +308,7 @@ impl Handler<Subscription> for Cache {
 
 impl Cache {
     /// Subscribe to `Log`s for the given `peer_id` and `msg`
-    /// Optionally specify start_time which defaults to `LOG_EXPIRY_HOURS`
+    /// Optionally specify start_time which defaults to `CACHE_EXPIRY_S`
     pub fn subscribe(
         &mut self,
         peer_id: String,
@@ -317,7 +316,7 @@ impl Cache {
         subscriber_addr: Recipient<PeerDataResponse>,
         start_time: Option<NaiveDateTime>,
     ) {
-        let last_updated = start_time.unwrap_or(create_date_time(0));
+        let last_updated = start_time.unwrap_or(time_secs_ago(0));
         let peer_message = PeerMessage {
             peer_id: peer_id.clone(),
             msg: msg.to_owned(),
@@ -349,13 +348,14 @@ impl Cache {
 
     fn subscribe_msgs(&mut self, peer_message: PeerMessage, start_time: Option<NaiveDateTime>) {
         use std::collections::hash_map::Entry;
-        let last_updated = start_time.unwrap_or(create_date_time(0));
+        let last_updated = start_time.unwrap_or(time_secs_ago(*CACHE_EXPIRY_S * 3600));
         // Set last accessed now, otherwise could be missed if subscriber is closed before accessed
         match self.cache.entry(peer_message) {
-            Entry::Occupied(mut o) => {
-                if o.get().last_updated > last_updated {
-                    o.get_mut().last_updated = last_updated;
-                }
+            Entry::Occupied(mut _o) => {
+                //                if o.get().last_updated > last_updated {
+                //                    o.get_mut().last_updated = last_updated;
+                //                }
+                // temporarily noop, because we fix cache start time to CACHE_EXPIRY_S
             }
             Entry::Vacant(v) => {
                 v.insert(PeerMessageCache {
@@ -393,7 +393,7 @@ mod tests {
         };
         let v = PeerMessageCache {
             deque: SliceDeque::new(),
-            last_updated: create_date_time(0),
+            last_updated: time_secs_ago(0),
             started_update: None,
         };
         cache.cache.insert(k, v);
@@ -403,7 +403,7 @@ mod tests {
         };
         let v = PeerMessageCache {
             deque: SliceDeque::new(),
-            last_updated: create_date_time(0),
+            last_updated: time_secs_ago(0),
             started_update: None,
         };
         cache.cache.insert(k, v);
@@ -417,7 +417,7 @@ mod tests {
             },
             data: vec![SubstrateLog {
                 log: Default::default(),
-                created_at: create_date_time(10),
+                created_at: time_secs_ago(10),
             }],
         }
     }
@@ -430,7 +430,7 @@ mod tests {
             },
             data: vec![SubstrateLog {
                 log: Default::default(),
-                created_at: create_date_time(10),
+                created_at: time_secs_ago(10),
             }],
         }
     }
@@ -488,10 +488,8 @@ mod tests {
             peer_id: "Peer 1".to_string(),
             msg: "Message 1".to_string(),
         };
-        let t1 = create_date_time(((*LOG_EXPIRY_HOURS * 3600) + 1).into());
-        let t2 = create_date_time(((*LOG_EXPIRY_HOURS * 3600) - 1).into());
-        dbg!(&t1);
-        dbg!(&t2);
+        let t1 = time_secs_ago(((*CACHE_EXPIRY_S * 3600) + 1).into());
+        let t2 = time_secs_ago(((*CACHE_EXPIRY_S * 3600) - 1).into());
         let sl1 = SubstrateLog {
             log: Default::default(),
             created_at: t1,
@@ -512,7 +510,6 @@ mod tests {
             .unwrap()
             .deque
             .append(&mut vec![sl2][..].into());
-        dbg!(&cache.cache.get(&k).unwrap().deque);
         assert_eq!(cache.cache.get(&k).unwrap().deque.len(), 2);
         cache.purge_expired();
         assert_eq!(cache.cache.get(&k).unwrap().deque.len(), 1);

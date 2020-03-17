@@ -164,9 +164,19 @@ impl Handler<PurgeLogs> for DbExecutor {
                  AND substrate_logs.created_at < now() - {} * interval '1 hour'",
                 msg.hours_valid
             );
-            info!("Cleaning up database");
+            info!("Cleaning up database - deleting old log messages");
             match diesel::sql_query(query).execute(conn) {
                 Err(e) => error!("Error purging expired logs: {:?}", e),
+                Ok(n) => info!("Purged {} records from database", n),
+            }
+        });
+        let _ = self.with_connection(|conn| {
+            let query = "DELETE FROM peer_connections \
+                 WHERE id NOT IN \
+                 (SELECT DISTINCT peer_connection_id FROM substrate_logs)";
+            info!("Cleaning up database - deleting unreferenced peer_connections");
+            match diesel::sql_query(query).execute(conn) {
+                Err(e) => error!("Error purging expired peer_connections: {:?}", e),
                 Ok(n) => info!("Purged {} records from database", n),
             }
         });
@@ -176,7 +186,6 @@ impl Handler<PurgeLogs> for DbExecutor {
 
 pub fn create_pool() -> Pool<ConnectionManager<PgConnection>> {
     let manager = ConnectionManager::new(DATABASE_URL.to_string());
-    dbg!(&DATABASE_URL.to_string());
     let pool = Pool::builder()
         .max_size(*DATABASE_POOL_SIZE)
         .build(manager)
