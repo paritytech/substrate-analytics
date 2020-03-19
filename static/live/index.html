@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>Substrate Analytics - Live</title>
+    <title>Substrate Analytics - Live - Single Node (Detail)</title>
     <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bulma@0.8.0/css/bulma.min.css">
     <link rel=stylesheet href=https://cdn.jsdelivr.net/npm/pretty-print-json@0.2/dist/pretty-print-json.css>
@@ -18,7 +18,7 @@
         <div class="navbar-start">
             <div class=" navbar-item">
                 <h1 class="title">
-                    Substrate Analytics | Live
+                    Substrate Analytics | Live - Single Node (Detail)
                 </h1>
             </div>
 
@@ -37,7 +37,7 @@
             <div class="navbar-item">
                 <div class="field">
                     <div class="control">
-                        <button class="button is-primary" onclick="viewGraphs()">View</button>
+                        <button class="button is-primary" onclick="initialiseFeed()">View</button>
                     </div>
                 </div>
             </div>
@@ -68,6 +68,7 @@
 </section>
 
 <script>
+    const minutesToShow = 5;
 
     class Subscription {
         constructor(peer_id, msg, start_time, interest) {
@@ -85,12 +86,103 @@
 
     });
 
-    function viewGraphs() {
+    function initialiseFeed() {
         stopFeed();
         let peer_id = document.getElementById('node-select').value;
-        let start_time = moment().subtract(1, 'hour').format('YYYY-MM-DD[T]HH:mm:ss.SSSSSS');
+        let start_time = moment().subtract(minutesToShow, 'minutes').format('YYYY-MM-DD[T]HH:mm:ss.SSSSSS');
         let subscription = new Subscription(peer_id, 'tracing.profiling', start_time, 'subscribe' );
         socket.send(JSON.stringify(subscription));
+    }
+
+    function stopFeed() {
+        let peer_id = document.getElementById('node-select').value;
+        let subscription = new Subscription(peer_id, 'tracing.profiling', "", 'unsubscribe' );
+        socket.send(JSON.stringify(subscription));
+    }
+
+    function loadNodes() {
+        nodeSelect.options.length = 0;
+        nodes.set(0, "Please select a node");
+        const opt = new Option("Please select a node", 0);
+        nodeSelect.options.add(opt);
+        let request = new Request('/nodes');
+        fetch(request)
+            .then(response => response.json())
+            .then(json => {
+                for (const node of json) {
+                    nodes.set(node.id, node);
+                    const opt = new Option(node.peer_id, node.peer_id);
+                    nodeSelect.options.add(opt);
+                }
+            });
+    }
+
+    loadNodes();
+
+</script>
+
+<script>
+    let socket = new WebSocket(`ws://${window.location.host}/feed`);
+    let traceData = new Map();
+    let graph = undefined;
+
+    function processData(data) {
+        let json = JSON.parse(data);
+        if (json.peer_message.msg !== "tracing.profiling") {
+            console.log(`Message received: ${json.peer_message.msg}`)
+            return;
+        }
+        for (const element of json.data) {
+            if (!traceData.has(element.log.name)) {
+                traceData.set(element.log.name, new Map());
+            }
+            let nameMap = traceData.get(element.log.name);
+            if (!nameMap.has(element.log.target)) {
+                nameMap.set(element.log.target, [[],[],[]]);
+            }
+            let arr = nameMap.get(element.log.target);
+            // getTruncateIndex(arr[0]);
+            arr[0].push(new Date(element.created_at));
+            arr[1].push(element.log.time);
+            arr[2].push(`Values: ${element.log.values}`);
+        }
+        updatePlots();
+    }
+
+    function getTruncateIndex(arr) {
+        const start_time = moment().subtract(minutesToShow, 'minutes');
+        for (let i = 0; i < arr.length; i++) {
+            if (arr[i] < start_time) {
+                console.log(`Truncate index = ${i}`);
+                return i;
+            }
+        }
+    }
+    
+    function initialiseGraph() {
+        let traces = [];
+        for (const [name, targetMap] of traceData) {
+            let nameTraces = [];
+            for ([target, values] of targetMap) {
+                nameTraces.push({
+                    x: values[0],
+                    y: values[1],
+                    name: `${target}::${name}`,
+                    type: "scatter",
+                    mode: 'lines+markers'
+                });
+            }
+            traces.push(nameTraces);
+        }
+        console.log(traces);
+
+        Plotly.newPlot('graphs', traces);
+    }
+
+    function updatePlots() {
+        if (graph === undefined) {
+            initialiseGraph();
+        }
         // let graphName = `${graph_data[0].logs.target}::${graph_data[0].logs.name}`;
         // let yData = graph_data.map(function (obj) {
         //     return obj.logs.time / 1000000;
@@ -123,43 +215,14 @@
         // Plotly.newPlot(graphName, data, layout);
     }
 
-    function stopFeed() {
-        let peer_id = document.getElementById('node-select').value;
-        let subscription = new Subscription(peer_id, 'tracing.profiling', "", 'unsubscribe' );
-        socket.send(JSON.stringify(subscription));
-    }
-
-    function loadNodes() {
-        nodeSelect.options.length = 0;
-        nodes.set(0, "Please select a node");
-        const opt = new Option("Please select a node", 0);
-        nodeSelect.options.add(opt);
-        let request = new Request('/nodes');
-        fetch(request)
-            .then(response => response.json())
-            .then(json => {
-                for (const node of json) {
-                    nodes.set(node.id, node);
-                    const opt = new Option(node.peer_id, node.peer_id);
-                    nodeSelect.options.add(opt);
-                }
-            });
-    }
-
-    loadNodes();
-
-</script>
-
-<script>
-    let socket = new WebSocket(`ws://${window.location.host}/feed`);
+    socket.onmessage = function(event) {
+        console.log(`[message] Data received from server:`);
+        console.log(`Received ${event.data.length} logs from server`);
+        processData(event.data);
+    };
 
     socket.onopen = function(e) {
         console.log("[open] Connection established");
-    };
-
-    socket.onmessage = function(event) {
-        console.log(`[message] Data received from server:`);
-        console.log(event.data);
     };
 
     socket.onclose = function(event) {
