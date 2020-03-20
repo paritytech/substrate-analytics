@@ -26,6 +26,7 @@ pub struct Metrics {
     ws_dropped_count: Arc<AtomicU64>,
     ws_bytes_received: Arc<AtomicU64>,
     req_count: Arc<AtomicU64>,
+    concurrent_feed_count: Arc<AtomicU64>,
 }
 
 impl Metrics {
@@ -44,38 +45,50 @@ impl Metrics {
     pub fn inc_req_count(&self) {
         self.req_count.fetch_add(1, Ordering::Relaxed);
     }
+    pub fn inc_concurrent_feed_count(&self) {
+        self.concurrent_feed_count.fetch_add(1, Ordering::Relaxed);
+    }
+    pub fn dec_concurrent_feed_count(&self) {
+        self.concurrent_feed_count.fetch_sub(1, Ordering::Relaxed);
+    }
 }
 
 const WS_MESSAGE_COUNT_TEMPLATE: &str =
-    "# HELP save_ws_message_count Number of binary and text messages received - (does not include PING/PONG messages)\n\
-     # TYPE save_ws_message_count counter\n\
-     save_ws_message_count ";
+    "# HELP ws_message_count Number of binary and text messages received - (does not include PING/PONG messages)\n\
+     # TYPE ws_message_count counter\n\
+     ws_message_count ";
 
 const WS_CONNECTED_COUNT_TEMPLATE: &str =
-    "# HELP save_ws_connected_count Total number of WS connections made since launch.\n\
-     # TYPE save_ws_connected_count counter\n\
-     save_ws_connected_count ";
+    "# HELP nodes_connected_count Total number of WS connections made since launch.\n\
+     # TYPE nodes_connected_count counter\n\
+     nodes_connected_count ";
 
 const WS_DROPPED_COUNT_TEMPLATE: &str =
-    "# HELP save_ws_dropped_count Total number of WS connections dropped since launch.\n\
-     # TYPE save_ws_dropped_count counter\n\
-     save_ws_dropped_count ";
+    "# HELP nodes_dropped_count Total number of WS connections dropped since launch.\n\
+     # TYPE nodes_dropped_count counter\n\
+     nodes_dropped_count ";
 
 const WS_BYTES_RECEIVED_TEMPLATE: &str =
-    "# HELP save_ws_bytes_received Total bytes received in binary and text WS messages.\n\
-     # TYPE save_ws_bytes_received counter\n\
-     save_ws_bytes_received ";
+    "# HELP ws_bytes_received Total bytes received in binary and text WS messages.\n\
+     # TYPE ws_bytes_received counter\n\
+     ws_bytes_received ";
 
 const REQ_COUNT_TEMPLATE: &str =
-    "# HELP save_requests Number of get requests to non WS routes, also excluding metrics route.\n\
-     # TYPE save_requests counter\n\
-     save_requests ";
+    "# HELP requests Number of get requests to non WS routes, also excluding metrics route.\n\
+     # TYPE requests counter\n\
+     requests ";
+
+const CONCURRENT_FEED_COUNT_TEMPLATE: &str =
+    "# HELP concurrent_feed_connections Number of WS feed connections consuming data.\n\
+     # TYPE concurrent_feed_connections gauge\n\
+     concurrent_feed_connections ";
 
 impl fmt::Display for Metrics {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(
             f,
             "{}{}\n\
+             {}{}\n\
              {}{}\n\
              {}{}\n\
              {}{}\n\
@@ -90,6 +103,8 @@ impl fmt::Display for Metrics {
             self.ws_bytes_received.load(Ordering::Relaxed),
             REQ_COUNT_TEMPLATE,
             self.req_count.load(Ordering::Relaxed),
+            CONCURRENT_FEED_COUNT_TEMPLATE,
+            self.concurrent_feed_count.load(Ordering::Relaxed),
         )
     }
 }
