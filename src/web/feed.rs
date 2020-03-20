@@ -1,16 +1,12 @@
-use std::time::{Duration, Instant};
-
 use crate::cache::{Cache, Interest, Subscription};
 use crate::db::peer_data::PeerDataResponse;
-use crate::db::DbExecutor;
 use crate::web::metrics::Metrics;
 use actix::prelude::*;
-use actix_files as fs;
-use actix_web::{middleware, web, web::Data, App, Error, HttpRequest, HttpResponse, HttpServer};
+use actix_web::{web, web::Data, Error, HttpRequest, HttpResponse};
 use actix_web_actors::ws;
 use chrono::NaiveDateTime;
 use serde_json::Value;
-//use serde_json::json;
+use std::time::{Duration, Instant};
 
 const HEARTBEAT_INTERVAL: Duration = Duration::from_secs(5);
 const CLIENT_TIMEOUT: Duration = Duration::from_secs(60);
@@ -22,18 +18,15 @@ pub fn configure(cfg: &mut actix_web::web::ServiceConfig) {
 async fn ws_index(
     r: HttpRequest,
     stream: web::Payload,
-    db: Data<Addr<DbExecutor>>,
     cache: Data<Addr<Cache>>,
     metrics: actix_web::web::Data<Metrics>,
 ) -> Result<HttpResponse, Error> {
-    ws::start(WebSocket::new(db, cache, metrics), &r, stream)
+    ws::start(WebSocket::new(cache, metrics), &r, stream)
 }
 
 struct WebSocket {
     hb: Instant,
-    last_logs: Option<NaiveDateTime>,
     cache: Data<Addr<Cache>>,
-    db: Data<Addr<DbExecutor>>,
     metrics: actix_web::web::Data<Metrics>,
 }
 
@@ -48,7 +41,6 @@ impl Handler<PeerDataResponse> for WebSocket {
     type Result = Result<(), &'static str>;
 
     fn handle(&mut self, msg: PeerDataResponse, ctx: &mut Self::Context) -> Self::Result {
-        use ws::Message::Text;
         ctx.text(json!(msg).to_string());
         Ok(())
     }
@@ -83,7 +75,7 @@ impl StreamHandler<Result<ws::Message, ws::ProtocolError>> for WebSocket {
                     ctx.text(e);
                 }
             }
-            Ok(ws::Message::Binary(bin)) => (),
+            Ok(ws::Message::Binary(_bin)) => (),
             Ok(ws::Message::Close(_)) => {
                 ctx.stop();
             }
@@ -93,16 +85,10 @@ impl StreamHandler<Result<ws::Message, ws::ProtocolError>> for WebSocket {
 }
 
 impl WebSocket {
-    fn new(
-        db: Data<Addr<DbExecutor>>,
-        cache: Data<Addr<Cache>>,
-        metrics: actix_web::web::Data<Metrics>,
-    ) -> Self {
+    fn new(cache: Data<Addr<Cache>>, metrics: actix_web::web::Data<Metrics>) -> Self {
         Self {
             hb: Instant::now(),
-            last_logs: None,
             cache,
-            db,
             metrics,
         }
     }

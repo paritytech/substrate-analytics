@@ -17,6 +17,8 @@
 use actix_files::Files;
 
 pub fn configure(cfg: &mut actix_web::web::ServiceConfig) {
-    cfg.service(Files::new("dash/benchmarks", "./static/benchmarks/").index_file("index.html"));
-    cfg.service(Files::new("dash/live", "./static/live/").index_file("index.html"));
+    cfg.service(
+        Files::new("dashboard/benchmarks", "./static/benchmarks/").index_file("index.html"),
+    );
+    cfg.service(Files::new("dashboard/node", "./static/node/").index_file("index.html"));
 }

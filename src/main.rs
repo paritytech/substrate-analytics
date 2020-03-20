@@ -180,7 +180,7 @@ async fn main() -> std::io::Result<()> {
             .configure(web::stats::configure)
             .configure(web::metrics::configure)
             .configure(web::benchmarks::configure)
-            .configure(web::dash::configure)
+            .configure(web::dashboard::configure)
             .configure(web::feed::configure)
             .configure(web::root::configure)
     })
