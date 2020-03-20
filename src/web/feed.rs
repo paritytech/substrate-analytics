@@ -3,6 +3,7 @@ use std::time::{Duration, Instant};
 use crate::cache::{Cache, Interest, Subscription};
 use crate::db::peer_data::PeerDataResponse;
 use crate::db::DbExecutor;
+use crate::web::metrics::Metrics;
 use actix::prelude::*;
 use actix_files as fs;
 use actix_web::{middleware, web, web::Data, App, Error, HttpRequest, HttpResponse, HttpServer};
@@ -12,7 +13,7 @@ use serde_json::Value;
 //use serde_json::json;
 
 const HEARTBEAT_INTERVAL: Duration = Duration::from_secs(5);
-const CLIENT_TIMEOUT: Duration = Duration::from_secs(10);
+const CLIENT_TIMEOUT: Duration = Duration::from_secs(60);
 
 pub fn configure(cfg: &mut actix_web::web::ServiceConfig) {
     cfg.service(actix_web::web::scope("/feed").route("", actix_web::web::get().to(ws_index)));
@@ -23,8 +24,9 @@ async fn ws_index(
     stream: web::Payload,
     db: Data<Addr<DbExecutor>>,
     cache: Data<Addr<Cache>>,
+    metrics: actix_web::web::Data<Metrics>,
 ) -> Result<HttpResponse, Error> {
-    ws::start(WebSocket::new(db, cache), &r, stream)
+    ws::start(WebSocket::new(db, cache, metrics), &r, stream)
 }
 
 struct WebSocket {
@@ -32,6 +34,14 @@ struct WebSocket {
     last_logs: Option<NaiveDateTime>,
     cache: Data<Addr<Cache>>,
     db: Data<Addr<DbExecutor>>,
+    metrics: actix_web::web::Data<Metrics>,
+}
+
+impl Drop for WebSocket {
+    fn drop(&mut self) {
+        self.metrics.dec_concurrent_feed_count();
+    }
+    //    info("Dropped client feed connection, mailbox backlog = {}", );
 }
 
 impl Handler<PeerDataResponse> for WebSocket {
@@ -49,7 +59,10 @@ impl Actor for WebSocket {
 
     // Start heartbeat and updates on new connection
     fn started(&mut self, ctx: &mut Self::Context) {
+        // Ensure we can keep sufficient backlog to survive a temp disconnect
+        ctx.set_mailbox_capacity(64);
         self.hb(ctx);
+        self.metrics.inc_concurrent_feed_count();
     }
 }
 
@@ -80,12 +93,17 @@ impl StreamHandler<Result<ws::Message, ws::ProtocolError>> for WebSocket {
 }
 
 impl WebSocket {
-    fn new(db: Data<Addr<DbExecutor>>, cache: Data<Addr<Cache>>) -> Self {
+    fn new(
+        db: Data<Addr<DbExecutor>>,
+        cache: Data<Addr<Cache>>,
+        metrics: actix_web::web::Data<Metrics>,
+    ) -> Self {
         Self {
             hb: Instant::now(),
             last_logs: None,
             cache,
             db,
+            metrics,
         }
     }
 
