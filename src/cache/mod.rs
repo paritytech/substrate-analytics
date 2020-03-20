@@ -111,9 +111,6 @@ impl Actor for Cache {
 
 impl Cache {
     fn request_updates(&mut self, ctx: &mut Context<Self>) {
-        if self.subscribers.is_empty() {
-            return;
-        }
         let now = Instant::now();
         for (peer_message, started) in self.updates_in_progress() {
             let dur = now - started;

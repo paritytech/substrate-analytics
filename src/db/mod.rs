@@ -33,7 +33,7 @@ use diesel::RunQueryDsl;
 use self::models::{NewPeerConnection, NewSubstrateLog, PeerConnection};
 use crate::{DATABASE_POOL_SIZE, DATABASE_URL};
 
-pub const RECORD_LIMIT: i32 = 1000;
+pub const RECORD_LIMIT: i32 = 10_000;
 
 pub struct DbExecutor {
     pool: Pool<ConnectionManager<PgConnection>>,
