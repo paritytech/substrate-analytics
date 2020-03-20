@@ -229,8 +229,31 @@ impl Cache {
                 .deque
                 .binary_search_by(|item| item.created_at.cmp(&pmt))
             {
-                Ok(n) => n + 1,
-                _ => 0,
+                Ok(n) => Some(n + 1),
+                _ => None,
+            };
+            let idx = match idx {
+                Some(n) => n,
+                None => {
+                    debug!("Finding closest time");
+                    peer_data
+                        .deque
+                        .iter_mut()
+                        .enumerate()
+                        .min_by(|a, b| {
+                            let y =
+                                a.1.created_at
+                                    .signed_duration_since(*pmt)
+                                    .num_milliseconds();
+                            let z =
+                                &b.1.created_at
+                                    .signed_duration_since(*pmt)
+                                    .num_milliseconds();
+                            (y * y).cmp(&(z * z))
+                        })
+                        .expect("")
+                        .0
+                }
             };
             let response_data = peer_data.deque[idx..].to_vec();
             let pdr = PeerDataResponse {
