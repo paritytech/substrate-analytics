@@ -18,6 +18,7 @@ pub mod benchmarks;
 pub mod filters;
 pub mod models;
 pub mod nodes;
+pub mod peer_data;
 pub mod reputation;
 pub mod stats;
 
@@ -31,6 +32,8 @@ use diesel::RunQueryDsl;
 
 use self::models::{NewPeerConnection, NewSubstrateLog, PeerConnection};
 use crate::{DATABASE_POOL_SIZE, DATABASE_URL};
+
+pub const RECORD_LIMIT: i32 = 1000;
 
 pub struct DbExecutor {
     pool: Pool<ConnectionManager<PgConnection>>,
@@ -161,9 +164,19 @@ impl Handler<PurgeLogs> for DbExecutor {
                  AND substrate_logs.created_at < now() - {} * interval '1 hour'",
                 msg.hours_valid
             );
-            info!("Cleaning up database");
+            info!("Cleaning up database - deleting old log messages");
             match diesel::sql_query(query).execute(conn) {
                 Err(e) => error!("Error purging expired logs: {:?}", e),
+                Ok(n) => info!("Purged {} records from database", n),
+            }
+        });
+        let _ = self.with_connection(|conn| {
+            let query = "DELETE FROM peer_connections \
+                 WHERE id NOT IN \
+                 (SELECT DISTINCT peer_connection_id FROM substrate_logs)";
+            info!("Cleaning up database - deleting unreferenced peer_connections");
+            match diesel::sql_query(query).execute(conn) {
+                Err(e) => error!("Error purging expired peer_connections: {:?}", e),
                 Ok(n) => info!("Purged {} records from database", n),
             }
         });

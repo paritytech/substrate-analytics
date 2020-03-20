@@ -21,85 +21,102 @@ use diesel::{result::QueryResult, sql_query, RunQueryDsl};
 use failure::Error;
 use serde_json::Value;
 
-use super::DbExecutor;
-use crate::db::filters::Filters;
+use super::{filters::Filters, DbExecutor, RECORD_LIMIT};
 
-pub enum NodeQueryType {
-    PeerInfo,
-    AllLogs,
-    Logs(String),
-    LogStats,
-}
-
-/// Message to indicate what information is required
-/// Response is always json
-pub enum NodesQuery {
-    AllNodes,
-    Node {
-        peer_id: String,
-        filters: Filters,
-        kind: NodeQueryType,
-    },
-}
+pub struct NodesQuery(pub Filters);
 
 impl Message for NodesQuery {
-    type Result = Result<Value, Error>;
+    type Result = Result<Vec<Node>, Error>;
 }
 
 impl Handler<NodesQuery> for DbExecutor {
-    type Result = Result<Value, Error>;
+    type Result = Result<Vec<Node>, Error>;
 
     fn handle(&mut self, msg: NodesQuery, _: &mut Self::Context) -> Self::Result {
-        match msg {
-            NodesQuery::AllNodes => self.get_nodes(),
-            NodesQuery::Node {
-                peer_id,
-                filters,
-                kind,
-            } => match kind {
-                NodeQueryType::PeerInfo => self.get_peer_counts(peer_id, filters),
-                NodeQueryType::AllLogs => self.get_all_logs(peer_id, filters),
-                NodeQueryType::Logs(msg_type) => self.get_logs(peer_id, msg_type, filters),
-                NodeQueryType::LogStats => self.get_log_stats(peer_id),
-            },
+        self.get_nodes(msg.0)
+    }
+}
+
+pub struct LogsQuery(pub Filters);
+
+impl Message for LogsQuery {
+    type Result = Result<Vec<Log>, Error>;
+}
+
+impl Handler<LogsQuery> for DbExecutor {
+    type Result = Result<Vec<Log>, Error>;
+
+    fn handle(&mut self, msg: LogsQuery, _: &mut Self::Context) -> Self::Result {
+        let has_msg = msg.0.msg.is_some();
+        let has_target = msg.0.target.is_some();
+        if has_msg {
+            if has_target {
+                self.get_log_msgs_with_target(msg.0)
+            } else {
+                self.get_log_msgs(msg.0)
+            }
+        } else {
+            self.get_all_logs(msg.0)
         }
+    }
+}
+
+pub struct StatsQuery(pub Filters);
+
+impl Message for StatsQuery {
+    type Result = Result<Vec<Stats>, Error>;
+}
+
+impl Handler<StatsQuery> for DbExecutor {
+    type Result = Result<Vec<Stats>, Error>;
+
+    fn handle(&mut self, msg: StatsQuery, _: &mut Self::Context) -> Self::Result {
+        self.get_log_stats(msg.0)
     }
 }
 
 #[derive(Serialize, Deserialize, Debug, QueryableByName)]
 pub struct Node {
     #[sql_type = "Nullable<Text>"]
-    peer_id: Option<String>,
+    pub peer_id: Option<String>,
 }
 
 #[derive(Serialize, Deserialize, Debug, QueryableByName)]
-pub struct SubstrateLogQueryDb {
+pub struct Log {
     #[sql_type = "Text"]
-    ip_addr: String,
+    pub ip_addr: String,
     #[sql_type = "Text"]
-    peer_id: String,
+    pub peer_id: String,
+    #[sql_type = "Text"]
+    pub msg: String,
     #[sql_type = "Timestamp"]
-    ts: NaiveDateTime,
-    #[sql_type = "Timestamp"]
-    created_at: NaiveDateTime,
+    pub created_at: NaiveDateTime,
     #[sql_type = "Jsonb"]
-    logs: Value,
+    pub logs: Value,
+}
+
+#[derive(Serialize, Deserialize, Debug, QueryableByName)]
+pub struct Stats {
+    #[sql_type = "BigInt"]
+    pub qty: i64,
+    #[sql_type = "Text"]
+    pub log_type: String,
 }
 
 #[derive(Serialize, Deserialize, Debug, QueryableByName)]
 pub struct PeerInfoDb {
     #[sql_type = "Text"]
-    ip_addr: String,
+    pub ip_addr: String,
     #[sql_type = "Text"]
-    peer_id: String,
+    pub peer_id: String,
     #[sql_type = "Timestamp"]
-    ts: NaiveDateTime,
+    pub ts: NaiveDateTime,
     #[sql_type = "Integer"]
-    peer_count: i32,
+    pub peer_count: i32,
     #[sql_type = "Integer"]
-    connection_id: i32,
+    pub connection_id: i32,
     #[sql_type = "Nullable<Jsonb>"]
-    not_connected: Option<Value>,
+    pub not_connected: Option<Value>,
 }
 
 impl PeerInfoDb {
@@ -136,16 +153,8 @@ impl From<PeerInfoDb> for PeerInfo {
     }
 }
 
-#[derive(Serialize, Deserialize, Debug, QueryableByName)]
-pub struct LogStats {
-    #[sql_type = "BigInt"]
-    pub qty: i64,
-    #[sql_type = "Text"]
-    pub log_type: String,
-}
-
 impl DbExecutor {
-    fn get_log_stats(&self, peer_id: String) -> Result<Value, Error> {
+    fn get_log_stats(&self, filters: Filters) -> Result<Vec<Stats>, Error> {
         match self.with_connection(|conn| {
             let query = sql_query(
                 "SELECT COUNT(log_type) as qty, log_type \
@@ -156,21 +165,21 @@ impl DbExecutor {
                  WHERE peer_id = $1) t \
                  GROUP BY t.log_type",
             )
-            .bind::<Text, _>(peer_id.to_string());
+            .bind::<Text, _>(filters.peer_id.unwrap_or(String::new()));
             debug!(
                 "get_log_stats query: {}",
                 diesel::debug_query::<diesel::pg::Pg, _>(&query)
             );
-            let result: QueryResult<Vec<LogStats>> = query.get_results(conn);
+            let result: QueryResult<Vec<Stats>> = query.get_results(conn);
             result
         }) {
-            Ok(Ok(v)) => Ok(json!(v)),
+            Ok(Ok(v)) => Ok(v),
             Ok(Err(e)) => Err(e.into()),
             Err(e) => Err(e.into()),
         }
     }
 
-    fn get_peer_counts(&self, peer_id: String, filters: Filters) -> Result<Value, Error> {
+    fn get_peer_counts(&self, filters: Filters) -> Result<Value, Error> {
         match self.with_connection(|conn| {
             let query = sql_query(
                 "SELECT ip_addr, peer_id, pc.id as connection_id, \
@@ -187,7 +196,7 @@ impl DbExecutor {
                  ORDER BY pc.id, ts ASC \
                  LIMIT $4",
             )
-            .bind::<Text, _>(peer_id.to_string())
+            .bind::<Text, _>(filters.peer_id.unwrap_or(String::new()))
             .bind::<Timestamp, _>(
                 filters
                     .start_time
@@ -198,7 +207,7 @@ impl DbExecutor {
                     .end_time
                     .unwrap_or_else(|| NaiveDateTime::from_timestamp(Utc::now().timestamp(), 0)),
             )
-            .bind::<Integer, _>(filters.limit.unwrap_or(100));
+            .bind::<Integer, _>(filters.limit.unwrap_or(RECORD_LIMIT));
             debug!(
                 "get_peer_counts query: {}",
                 diesel::debug_query::<diesel::pg::Pg, _>(&query)
@@ -212,26 +221,26 @@ impl DbExecutor {
         }
     }
 
-    fn get_nodes(&self) -> Result<Value, Error> {
+    fn get_nodes(&self, _filters: Filters) -> Result<Vec<Node>, Error> {
         match self.with_connection(|conn| {
             let query = "SELECT DISTINCT peer_id FROM peer_connections";
             let result: QueryResult<Vec<Node>> = diesel::sql_query(query).get_results(conn);
             result
         }) {
-            Ok(Ok(v)) => Ok(json!(v)),
+            Ok(Ok(v)) => Ok(v),
             Ok(Err(e)) => Err(e.into()),
             Err(e) => Err(e.into()),
         }
     }
 
-    fn get_all_logs(&self, peer_id: String, filters: Filters) -> Result<Value, Error> {
+    fn get_all_logs(&self, filters: Filters) -> Result<Vec<Log>, Error> {
         match self.with_connection(|conn| {
             let query = sql_query(
                 "SELECT sl.id, \
                  ip_addr, \
                  peer_id, \
+                 logs->>'msg' AS msg, \
                  logs, \
-                 CAST (logs->>'ts' as TIMESTAMP) as ts, \
                  sl.created_at, \
                  peer_connection_id \
                  FROM substrate_logs sl \
@@ -239,10 +248,10 @@ impl DbExecutor {
                  WHERE peer_id = $1 \
                  AND sl.created_at > $2 \
                  AND sl.created_at < $3 \
-                 ORDER BY ts DESC \
+                 ORDER BY created_at DESC \
                  LIMIT $4",
             )
-            .bind::<Text, _>(peer_id.to_string())
+            .bind::<Text, _>(filters.peer_id.unwrap_or(String::new()))
             .bind::<Timestamp, _>(
                 filters
                     .start_time
@@ -253,33 +262,28 @@ impl DbExecutor {
                     .end_time
                     .unwrap_or_else(|| NaiveDateTime::from_timestamp(Utc::now().timestamp(), 0)),
             )
-            .bind::<Integer, _>(filters.limit.unwrap_or(100));
+            .bind::<Integer, _>(filters.limit.unwrap_or(RECORD_LIMIT));
             debug!(
-                "get_recent_logs query: {}",
+                "get_all_logs query: {}",
                 diesel::debug_query::<diesel::pg::Pg, _>(&query)
             );
-            let result: QueryResult<Vec<SubstrateLogQueryDb>> = query.get_results(conn);
+            let result: QueryResult<Vec<Log>> = query.get_results(conn);
             result
         }) {
-            Ok(Ok(v)) => Ok(json!(v)),
+            Ok(Ok(v)) => Ok(v),
             Ok(Err(e)) => Err(e.into()),
             Err(e) => Err(e.into()),
         }
     }
 
-    fn get_logs(
-        &self,
-        peer_id: String,
-        msg_type: String,
-        filters: Filters,
-    ) -> Result<Value, Error> {
+    fn get_log_msgs(&self, filters: Filters) -> Result<Vec<Log>, Error> {
         match self.with_connection(|conn| {
             let query = sql_query(
                 "SELECT sl.id, \
                  ip_addr, \
                  peer_id, \
+                 logs->>'msg' AS msg, \
                  logs, \
-                 CAST (logs->>'ts' as TIMESTAMP) as ts, \
                  sl.created_at, \
                  peer_connection_id \
                  FROM substrate_logs sl \
@@ -288,10 +292,10 @@ impl DbExecutor {
                  AND sl.created_at > $2 \
                  AND sl.created_at < $3 \
                  AND logs->>'msg' = $4
-                 ORDER BY ts DESC \
+                 ORDER BY created_at DESC \
                  LIMIT $5",
             )
-            .bind::<Text, _>(peer_id.to_string())
+            .bind::<Text, _>(filters.peer_id.unwrap_or(String::new()))
             .bind::<Timestamp, _>(
                 filters
                     .start_time
@@ -302,16 +306,63 @@ impl DbExecutor {
                     .end_time
                     .unwrap_or_else(|| NaiveDateTime::from_timestamp(Utc::now().timestamp(), 0)),
             )
-            .bind::<Text, _>(msg_type)
-            .bind::<Integer, _>(filters.limit.unwrap_or(100));
+            .bind::<Text, _>(filters.msg.unwrap_or(String::new()))
+            .bind::<Integer, _>(filters.limit.unwrap_or(RECORD_LIMIT));
             debug!(
-                "get_recent_logs query: {}",
+                "get_log_msgs query: {}",
                 diesel::debug_query::<diesel::pg::Pg, _>(&query)
             );
-            let result: QueryResult<Vec<SubstrateLogQueryDb>> = query.get_results(conn);
+            let result: QueryResult<Vec<Log>> = query.get_results(conn);
             result
         }) {
-            Ok(Ok(v)) => Ok(json!(v)),
+            Ok(Ok(v)) => Ok(v),
+            Ok(Err(e)) => Err(e.into()),
+            Err(e) => Err(e.into()),
+        }
+    }
+
+    fn get_log_msgs_with_target(&self, filters: Filters) -> Result<Vec<Log>, Error> {
+        match self.with_connection(|conn| {
+            let query = sql_query(
+                "SELECT sl.id, \
+                 ip_addr, \
+                 peer_id, \
+                 logs->>'msg' AS msg, \
+                 logs, \
+                 sl.created_at, \
+                 peer_connection_id \
+                 FROM substrate_logs sl \
+                 LEFT JOIN peer_connections pc ON sl.peer_connection_id = pc.id \
+                 WHERE peer_id = $1 \
+                 AND sl.created_at > $2 \
+                 AND sl.created_at < $3 \
+                 AND logs->>'msg' = $4
+                 AND logs->>'target' = $5
+                 ORDER BY created_at DESC \
+                 LIMIT $6",
+            )
+            .bind::<Text, _>(filters.peer_id.unwrap_or(String::new()))
+            .bind::<Timestamp, _>(
+                filters
+                    .start_time
+                    .unwrap_or_else(|| NaiveDateTime::from_timestamp(0, 0)),
+            )
+            .bind::<Timestamp, _>(
+                filters
+                    .end_time
+                    .unwrap_or_else(|| NaiveDateTime::from_timestamp(Utc::now().timestamp(), 0)),
+            )
+            .bind::<Text, _>(filters.msg.unwrap_or(String::new()))
+            .bind::<Text, _>(filters.target.unwrap_or(String::new()))
+            .bind::<Integer, _>(filters.limit.unwrap_or(RECORD_LIMIT));
+            debug!(
+                "Query: get_log_msgs_with_target: {}",
+                diesel::debug_query::<diesel::pg::Pg, _>(&query)
+            );
+            let result: QueryResult<Vec<Log>> = query.get_results(conn);
+            result
+        }) {
+            Ok(Ok(v)) => Ok(v),
             Ok(Err(e)) => Err(e.into()),
             Err(e) => Err(e.into()),
         }

@@ -14,23 +14,11 @@
 // You should have received a copy of the GNU General Public License
 // along with Substrate Analytics.  If not, see <http://www.gnu.org/licenses/>.
 
-pub mod benchmarks;
-pub mod dashboard;
-pub mod feed;
-pub mod metrics;
-pub mod nodes;
-pub mod reputation;
-pub mod root;
-pub mod stats;
+use actix_files::Files;
 
-use crate::db::filters::Filters;
-
-pub fn get_filters(req: &actix_web::HttpRequest) -> Filters {
-    match actix_web::web::Query::<Filters>::from_query(&req.query_string()) {
-        Ok(f) => f.clone(),
-        Err(_) => {
-            warn!("Error deserializing Filters from querystring");
-            Filters::default()
-        }
-    }
+pub fn configure(cfg: &mut actix_web::web::ServiceConfig) {
+    cfg.service(
+        Files::new("dashboard/benchmarks", "./static/benchmarks/").index_file("index.html"),
+    );
+    cfg.service(Files::new("dashboard/node", "./static/node/").index_file("index.html"));
 }

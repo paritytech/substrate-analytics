@@ -26,21 +26,23 @@ extern crate serde_derive;
 #[macro_use]
 extern crate serde_json;
 
+pub mod cache;
 pub mod db;
 pub mod schema;
 pub mod util;
 mod web;
+
+use cache::Cache;
 
 use dotenv::dotenv;
 use std::env;
 use std::time::Duration;
 
 use crate::db::models::NewSubstrateLog;
+//use crate::db::peer_data::UpdateCache;
 use crate::db::*;
 use actix::prelude::*;
 use actix_web::{middleware, App, HttpServer};
-
-const HOURS_32_YEARS: u32 = 280_320;
 
 lazy_static! {
     /// Must be set
@@ -54,19 +56,24 @@ lazy_static! {
     pub static ref CLIENT_TIMEOUT: Duration = Duration::from_secs(
         parse_env("CLIENT_TIMEOUT").unwrap_or(10)
     );
-    pub static ref PURGE_FREQUENCY: Duration = Duration::from_secs(
-        parse_env("PURGE_FREQUENCY").unwrap_or(600)
+    pub static ref PURGE_INTERVAL_S: Duration = Duration::from_secs(
+        parse_env("PURGE_INTERVAL_S").unwrap_or(600)
     );
-    pub static ref LOG_EXPIRY_HOURS: u32 = parse_env("LOG_EXPIRY_HOURS").unwrap_or(HOURS_32_YEARS);
+    pub static ref LOG_EXPIRY_HOURS: u32 = parse_env("LOG_EXPIRY_HOURS").unwrap_or(3);
     pub static ref MAX_PENDING_CONNECTIONS: i32 = parse_env("MAX_PENDING_CONNECTIONS").unwrap_or(8192);
 
     // Set Codec to accept payload size of 512 MiB because default 65KiB is not enough
     pub static ref WS_MAX_PAYLOAD: usize = parse_env("WS_MAX_PAYLOAD").unwrap_or(524_288);
 
     pub static ref NUM_THREADS: usize = num_cpus::get() * 3;
+
     pub static ref DATABASE_POOL_SIZE: u32 = parse_env("DATABASE_POOL_SIZE").unwrap_or(*NUM_THREADS as u32);
     pub static ref DB_BATCH_SIZE: usize = parse_env("DB_BATCH_SIZE").unwrap_or(1024);
     pub static ref DB_SAVE_LATENCY_MS: Duration = Duration::from_millis(parse_env("DB_SAVE_LATENCY_MS").unwrap_or(100));
+
+    pub static ref CACHE_UPDATE_TIMEOUT_S: Duration = Duration::from_secs(parse_env("CACHE_UPDATE_TIMEOUT_S").unwrap_or(15));
+    pub static ref CACHE_UPDATE_INTERVAL_MS: Duration = Duration::from_millis(parse_env("CACHE_UPDATE_INTERVAL_MS").unwrap_or(1000));
+    pub static ref CACHE_EXPIRY_S: u64 = parse_env("CACHE_EXPIRY_S").unwrap_or(3600);
 }
 
 struct LogBuffer {
@@ -124,13 +131,15 @@ async fn main() -> std::io::Result<()> {
     dotenv().ok();
     env_logger::init();
     log_statics();
-    info!("Starting Substrate SAVE");
-    //    let sys = actix::System::new("substrate-analytics");
+    info!("Starting substrate-analytics");
     info!("Creating database pool");
     let pool = create_pool();
     info!("Starting DbArbiter with {} threads", *NUM_THREADS);
+
     let db_arbiter = SyncArbiter::start(*NUM_THREADS, move || db::DbExecutor::new(pool.clone()));
     info!("DbExecutor started");
+
+    let cache = Cache::new(db_arbiter.clone()).start();
 
     let log_buffer = LogBuffer {
         logs: Vec::new(),
@@ -139,7 +148,7 @@ async fn main() -> std::io::Result<()> {
     .start();
 
     util::PeriodicAction {
-        interval: *PURGE_FREQUENCY,
+        interval: *PURGE_INTERVAL_S,
         message: PurgeLogs {
             hours_valid: *LOG_EXPIRY_HOURS,
         },
@@ -162,6 +171,7 @@ async fn main() -> std::io::Result<()> {
             .data(db_arbiter.clone())
             .data(metrics.clone())
             .data(log_buffer.clone())
+            .data(cache.clone())
             .data(actix_web::web::JsonConfig::default().limit(4096))
             .wrap(middleware::NormalizePath)
             .wrap(middleware::Logger::default())
@@ -170,7 +180,8 @@ async fn main() -> std::io::Result<()> {
             .configure(web::stats::configure)
             .configure(web::metrics::configure)
             .configure(web::benchmarks::configure)
-            //            .configure(web::pages::configure)
+            .configure(web::dashboard::configure)
+            .configure(web::feed::configure)
             .configure(web::root::configure)
     })
     .backlog(*MAX_PENDING_CONNECTIONS)
@@ -183,17 +194,21 @@ async fn main() -> std::io::Result<()> {
 
 fn log_statics() {
     info!("Configuration options:");
+    info!("DATABASE_URL has been set");
+    info!("PORT = {:?}", *PORT);
+    info!("NUM_THREADS = {:?}", *NUM_THREADS);
     info!("HEARTBEAT_INTERVAL = {:?}", *HEARTBEAT_INTERVAL);
     info!("CLIENT_TIMEOUT = {:?}", *CLIENT_TIMEOUT);
-    info!("PURGE_FREQUENCY = {:?}", *PURGE_FREQUENCY);
-    info!("LOG_EXPIRY_HOURS = {:?}", *LOG_EXPIRY_HOURS);
     info!("MAX_PENDING_CONNECTIONS = {:?}", *MAX_PENDING_CONNECTIONS);
+    info!("WS_MAX_PAYLOAD = {:?} bytes", *WS_MAX_PAYLOAD);
     info!("DATABASE_POOL_SIZE = {:?}", *DATABASE_POOL_SIZE);
     info!("DB_BATCH_SIZE = {:?}", *DB_BATCH_SIZE);
     info!("DB_SAVE_LATENCY_MS = {:?}", *DB_SAVE_LATENCY_MS);
-    info!("PORT = {:?}", *PORT);
-    info!("WS_MAX_PAYLOAD = {:?} bytes", *WS_MAX_PAYLOAD);
-    info!("DATABASE_URL has been set");
+    info!("PURGE_INTERVAL_S = {:?}", *PURGE_INTERVAL_S);
+    info!("LOG_EXPIRY_HOURS = {:?}", *LOG_EXPIRY_HOURS);
+    info!("CACHE_UPDATE_TIMEOUT_S = {:?}", *CACHE_UPDATE_TIMEOUT_S);
+    info!("CACHE_UPDATE_INTERVAL_MS = {:?}", *CACHE_UPDATE_INTERVAL_MS);
+    info!("CACHE_EXPIRY_S = {:?}", *CACHE_EXPIRY_S);
 }
 
 fn parse_env<T>(var: &'static str) -> Result<T, ()>

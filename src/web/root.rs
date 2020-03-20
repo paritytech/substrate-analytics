@@ -196,11 +196,11 @@ impl StreamHandler<Result<ws::Message, ws::ProtocolError>> for NodeSocket {
             self.metrics.inc_ws_message_count();
             if self.peer_connection.peer_id.is_none() {
                 debug!("Searching for peerId for ip address: {}", &ip);
-                if let Some(peer_id) = logs["state"]["peerId"].as_str() {
+                if let Some(peer_id) = logs["network_id"].as_str() {
+                    self.update_peer_id(peer_id); // Support older versions of substrate
+                } else if let Some(peer_id) = logs["state"]["peerId"].as_str() {
                     self.update_peer_id(peer_id);
-                }
-                // Support older versions of substrate
-                else if let Some(peer_id) = logs["network_state"]["peerId"].as_str() {
+                } else if let Some(peer_id) = logs["network_state"]["peerId"].as_str() {
                     self.update_peer_id(peer_id);
                 }
             }
