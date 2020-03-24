@@ -119,9 +119,10 @@ build-publish-docker-release:
     NAMESPACE:                     "${KUBE_NAMESPACE}"
     REPLICAS:                      1
     WS_PORT:                       1024
-    ANALYTICS_LOG_EXPIRY_HOURS:    3
+    ANALYTICS_LOG_EXPIRY_H:        3
     ANALYTICS_RUST_LOG:            debug
     WS_MAX_PAYLOAD:                524_288 # Needs to be more than 65_536 (64KiB) which is actix-web default
+    ASSETS_PATH:                   /srv/substrate-analytics
   tags:
     # this is the runner that is used to deploy it
     - kubernetes-parity-build

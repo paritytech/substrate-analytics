@@ -62,8 +62,10 @@
 
 <script>
     const minutesToShow = 5;
-
     let peerId = "";
+    let nodes = new Map();
+    let traceData = new Map();
+    let subscriptions = [];
 
     class Subscription {
         constructor(peer_id, msg, start_time, interest) {
@@ -73,7 +75,6 @@
             this.interest = interest;
         }
     }
-    let nodes = new Map();
     const nodeSelect = document.querySelector('#node-select');
     nodeSelect.addEventListener('change', (event) => {
 
@@ -121,8 +122,8 @@
 </script>
 
 <script>
-    let socket = new WebSocket(`ws://${window.location.host}/feed`);
-    let traceData = new Map();
+    let socket;
+    createWs(socket);
 
     function processData(data) {
         let json = JSON.parse(data);
@@ -200,26 +201,33 @@
         }
     }
 
-    socket.onmessage = function(event) {
-        console.log(`message received`);
-        processData(event.data);
-    };
+    function createWs(socket) {
+        socket = new WebSocket(`ws://${window.location.host}/feed`);
+        socket.onmessage = function (event) {
+            console.log(`message received`);
+            processData(event.data);
+        };
 
-    socket.onopen = function(e) {
-        console.log("Connection established");
-    };
+        socket.onopen = function (e) {
+            console.log("Connection established");
+        };
 
-    socket.onclose = function(event) {
-        if (event.wasClean) {
-            console.log(`Connection closed cleanly, code=${event.code} reason=${event.reason}`);
-        } else {
-            console.log('Connection died');
-        }
-    };
+        socket.onclose = function (event) {
+            if (event.wasClean) {
+                console.log(`Connection closed cleanly, code=${event.code} reason=${event.reason}`);
+            } else {
+                console.log('Connection died, retrying in 5s...');
+                setTimeout(function() {
+                    createWs(socket);
+                }, 2500);
+            }
+        };
 
-    socket.onerror = function(error) {
-        console.log(`Error: ${error.message}`);
-    };
+        socket.onerror = function (error) {
+            console.log(`Error: ${error.message}`);
+        };
+    }
+
 </script>
 </body>
 </html>
