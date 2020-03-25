@@ -9,7 +9,7 @@ use serde_json::Value;
 use std::time::{Duration, Instant};
 
 const HEARTBEAT_INTERVAL: Duration = Duration::from_secs(5);
-const CLIENT_TIMEOUT: Duration = Duration::from_secs(60);
+const CLIENT_TIMEOUT_S: Duration = Duration::from_secs(60);
 
 pub fn configure(cfg: &mut actix_web::web::ServiceConfig) {
     cfg.service(actix_web::web::scope("/feed").route("", actix_web::web::get().to(ws_index)));
@@ -139,7 +139,7 @@ impl WebSocket {
 
     fn hb(&self, ctx: &mut <Self as Actor>::Context) {
         ctx.run_interval(HEARTBEAT_INTERVAL, |act, ctx| {
-            if Instant::now().duration_since(act.hb) > CLIENT_TIMEOUT {
+            if Instant::now().duration_since(act.hb) > CLIENT_TIMEOUT_S {
                 info!("Websocket Client heartbeat failed, disconnecting!");
                 ctx.stop();
                 return;

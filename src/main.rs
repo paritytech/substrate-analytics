@@ -53,13 +53,13 @@ lazy_static! {
     pub static ref HEARTBEAT_INTERVAL: Duration = Duration::from_secs(
         parse_env("HEARTBEAT_INTERVAL").unwrap_or(5)
     );
-    pub static ref CLIENT_TIMEOUT: Duration = Duration::from_secs(
-        parse_env("CLIENT_TIMEOUT").unwrap_or(10)
+    pub static ref CLIENT_TIMEOUT_S: Duration = Duration::from_secs(
+        parse_env("CLIENT_TIMEOUT_S").unwrap_or(10)
     );
     pub static ref PURGE_INTERVAL_S: Duration = Duration::from_secs(
         parse_env("PURGE_INTERVAL_S").unwrap_or(600)
     );
-    pub static ref LOG_EXPIRY_HOURS: u32 = parse_env("LOG_EXPIRY_HOURS").unwrap_or(3);
+    pub static ref LOG_EXPIRY_H: u32 = parse_env("LOG_EXPIRY_H").unwrap_or(3);
     pub static ref MAX_PENDING_CONNECTIONS: i32 = parse_env("MAX_PENDING_CONNECTIONS").unwrap_or(8192);
 
     // Set Codec to accept payload size of 512 MiB because default 65KiB is not enough
@@ -67,13 +67,15 @@ lazy_static! {
 
     pub static ref NUM_THREADS: usize = num_cpus::get() * 3;
 
-    pub static ref DATABASE_POOL_SIZE: u32 = parse_env("DATABASE_POOL_SIZE").unwrap_or(*NUM_THREADS as u32);
+    pub static ref DB_POOL_SIZE: u32 = parse_env("DB_POOL_SIZE").unwrap_or(*NUM_THREADS as u32);
     pub static ref DB_BATCH_SIZE: usize = parse_env("DB_BATCH_SIZE").unwrap_or(1024);
     pub static ref DB_SAVE_LATENCY_MS: Duration = Duration::from_millis(parse_env("DB_SAVE_LATENCY_MS").unwrap_or(100));
 
     pub static ref CACHE_UPDATE_TIMEOUT_S: Duration = Duration::from_secs(parse_env("CACHE_UPDATE_TIMEOUT_S").unwrap_or(15));
     pub static ref CACHE_UPDATE_INTERVAL_MS: Duration = Duration::from_millis(parse_env("CACHE_UPDATE_INTERVAL_MS").unwrap_or(1000));
     pub static ref CACHE_EXPIRY_S: u64 = parse_env("CACHE_EXPIRY_S").unwrap_or(3600);
+
+    pub static ref ASSETS_PATH: String = parse_env("ASSETS_PATH").unwrap_or("./static".to_string());
 }
 
 struct LogBuffer {
@@ -150,7 +152,7 @@ async fn main() -> std::io::Result<()> {
     util::PeriodicAction {
         interval: *PURGE_INTERVAL_S,
         message: PurgeLogs {
-            hours_valid: *LOG_EXPIRY_HOURS,
+            hours_valid: *LOG_EXPIRY_H,
         },
         recipient: db_arbiter.clone().recipient(),
     }
@@ -198,14 +200,14 @@ fn log_statics() {
     info!("PORT = {:?}", *PORT);
     info!("NUM_THREADS = {:?}", *NUM_THREADS);
     info!("HEARTBEAT_INTERVAL = {:?}", *HEARTBEAT_INTERVAL);
-    info!("CLIENT_TIMEOUT = {:?}", *CLIENT_TIMEOUT);
+    info!("CLIENT_TIMEOUT_S = {:?}", *CLIENT_TIMEOUT_S);
     info!("MAX_PENDING_CONNECTIONS = {:?}", *MAX_PENDING_CONNECTIONS);
     info!("WS_MAX_PAYLOAD = {:?} bytes", *WS_MAX_PAYLOAD);
-    info!("DATABASE_POOL_SIZE = {:?}", *DATABASE_POOL_SIZE);
+    info!("DB_POOL_SIZE = {:?}", *DB_POOL_SIZE);
     info!("DB_BATCH_SIZE = {:?}", *DB_BATCH_SIZE);
     info!("DB_SAVE_LATENCY_MS = {:?}", *DB_SAVE_LATENCY_MS);
     info!("PURGE_INTERVAL_S = {:?}", *PURGE_INTERVAL_S);
-    info!("LOG_EXPIRY_HOURS = {:?}", *LOG_EXPIRY_HOURS);
+    info!("LOG_EXPIRY_H = {:?}", *LOG_EXPIRY_H);
     info!("CACHE_UPDATE_TIMEOUT_S = {:?}", *CACHE_UPDATE_TIMEOUT_S);
     info!("CACHE_UPDATE_INTERVAL_MS = {:?}", *CACHE_UPDATE_INTERVAL_MS);
     info!("CACHE_EXPIRY_S = {:?}", *CACHE_EXPIRY_S);

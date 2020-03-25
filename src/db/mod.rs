@@ -31,7 +31,7 @@ use diesel::result::QueryResult;
 use diesel::RunQueryDsl;
 
 use self::models::{NewPeerConnection, NewSubstrateLog, PeerConnection};
-use crate::{DATABASE_POOL_SIZE, DATABASE_URL};
+use crate::{DATABASE_URL, DB_POOL_SIZE};
 
 pub const RECORD_LIMIT: i32 = 10_000;
 
@@ -187,12 +187,9 @@ impl Handler<PurgeLogs> for DbExecutor {
 pub fn create_pool() -> Pool<ConnectionManager<PgConnection>> {
     let manager = ConnectionManager::new(DATABASE_URL.to_string());
     let pool = Pool::builder()
-        .max_size(*DATABASE_POOL_SIZE)
+        .max_size(*DB_POOL_SIZE)
         .build(manager)
         .expect("Failed to create pool");
-    info!(
-        "Database pool created with {} connections",
-        *DATABASE_POOL_SIZE
-    );
+    info!("Database pool created with {} connections", *DB_POOL_SIZE);
     pool
 }

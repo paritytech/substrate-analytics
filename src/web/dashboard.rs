@@ -14,11 +14,18 @@
 // You should have received a copy of the GNU General Public License
 // along with Substrate Analytics.  If not, see <http://www.gnu.org/licenses/>.
 
+use crate::ASSETS_PATH;
 use actix_files::Files;
 
 pub fn configure(cfg: &mut actix_web::web::ServiceConfig) {
     cfg.service(
-        Files::new("dashboard/benchmarks", "./static/benchmarks/").index_file("index.html"),
+        Files::new(
+            "dashboard/benchmarks",
+            &format!("{}/benchmarks/", *ASSETS_PATH),
+        )
+        .index_file("index.html"),
     );
-    cfg.service(Files::new("dashboard/node", "./static/node/").index_file("index.html"));
+    cfg.service(
+        Files::new("dashboard/node", &format!("{}/node/", *ASSETS_PATH)).index_file("index.html"),
+    );
 }

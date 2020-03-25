@@ -8,7 +8,7 @@ performant and easily horizontally scalable by deploying more servers.
 
 Telemetry is stored in a PostgreSQL database. Management of the database schema is via `diesel` migrations.
 
-Stored data is purged from the DB according to `LOG_EXPIRY_HOURS`
+Stored data is purged from the DB according to `LOG_EXPIRY_H`
 
 For convenience there are also some JSON endpoints to make ad-hoc queries, although it is expected that
 the data is accessed directly from the database by a suitable dashboard (eg. Grafana).
@@ -19,7 +19,7 @@ appropriate (to be determined) database tables.
 #### Routes:
 
 - **`/`**
-  - incoming telemetry (with expiry as set by `LOG_EXPIRY_HOURS`) (ws) - set with this option in substrate cli: `--telemetry-url 'ws://127.0.0.1:8080 5'`
+  - incoming telemetry (with expiry as set by `LOG_EXPIRY_H`) (ws) - set with this option in substrate cli: `--telemetry-url 'ws://127.0.0.1:8080 5'`
 - **`/audit`**
   - incoming telemetry with no expiry (ws) - set with this option in substrate cli: `--telemetry-url 'ws://127.0.0.1:8080/audit 5'`
 
@@ -70,13 +70,13 @@ Substrate Analytics provides a `/metrics` endpoint for Prometheus.
 Optionally specify the following environment variables:
 
 - `HEARTBEAT_INTERVAL` (default: 5)
-- `CLIENT_TIMEOUT` (default: 10)
+- `CLIENT_TIMEOUT_S` (default: 10)
 - `PURGE_FREQUENCY` (default: 600)
-- `LOG_EXPIRY_HOURS`  (default: 280320)
+- `LOG_EXPIRY_H`  (default: 280320)
 - `MAX_PENDING_CONNECTIONS` (default: 8192)
 - `WS_MAX_PAYLOAD` (default: 524_288)
 - `NUM_THREADS` (default: CPUs * 3)
-- `DATABASE_POOL_SIZE` (default: `NUM_THREADS`)
+- `DB_POOL_SIZE` (default: `NUM_THREADS`)
 - `DB_BATCH_SIZE` (default: 1024) - batch size for insert
 - `DB_SAVE_LATENCY_MS` (default: 100) - max latency (ms) for insert
 

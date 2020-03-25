@@ -19,7 +19,7 @@ use crate::db::{
     models::{NewPeerConnection, NewSubstrateLog, PeerConnection},
     DbExecutor,
 };
-use crate::{LogBuffer, CLIENT_TIMEOUT, HEARTBEAT_INTERVAL, WS_MAX_PAYLOAD};
+use crate::{LogBuffer, CLIENT_TIMEOUT_S, HEARTBEAT_INTERVAL, WS_MAX_PAYLOAD};
 use actix::prelude::*;
 use actix_http::ws::Codec;
 use actix_web::{error, Error, HttpRequest, HttpResponse};
@@ -108,7 +108,7 @@ impl NodeSocket {
     fn hb(&self, ctx: &mut <Self as Actor>::Context) {
         let ip = self.ip.clone();
         ctx.run_interval(*HEARTBEAT_INTERVAL, move |act, ctx| {
-            if Instant::now().duration_since(act.hb) > *CLIENT_TIMEOUT {
+            if Instant::now().duration_since(act.hb) > *CLIENT_TIMEOUT_S {
                 info!("Websocket heartbeat failed for: {} - DISCONNECTING", ip);
                 ctx.stop();
                 return;
