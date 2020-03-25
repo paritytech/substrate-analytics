@@ -4,7 +4,7 @@
 
 Comprises a websocket server accepting incoming telemetry from multiple
 [Substrate](https://github.com/paritytech/substrate) nodes. substrate-analytics is designed to be resilient (to network errors),
-performant and easily horizontally scalable by deploying more servers.
+performant and horizontally scalable by deploying more servers.
 
 Telemetry is stored in a PostgreSQL database. Management of the database schema is via `diesel` migrations.
 
@@ -12,9 +12,6 @@ Stored data is purged from the DB according to `LOG_EXPIRY_H`
 
 For convenience there are also some JSON endpoints to make ad-hoc queries, although it is expected that
 the data is accessed directly from the database by a suitable dashboard (eg. Grafana).
-
-The next phase of the project with be to parse and structure the incoming logs into
-appropriate (to be determined) database tables.
 
 #### Routes:
 
@@ -28,15 +25,10 @@ JSON endpoints for convenience:
   - stats for db showing table / index sizes on disk
 - **`/nodes`**
   - list of logged nodes
-- **`/nodes/{peer_id}/peer_counts`**
-  - peer count history (for the
-given peer_id)
-- **`/nodes/{peer_id}/log_stats`**
+- **`/nodes/log_stats?peer_id=Qmd5K38Yti1NStacv7fjJwsXDCUZcf1ioKcAuFkq88RKtx`**
   - shows the quantity of each type of log message received
-- **`/nodes/{peer_id}/logs`**
-  - recent log messages, unprocessed
-- **`/nodes/{peer_id}/logs/{msg type}`**
-  - recent log messages, filtered by message type: `msg`
+- **`/nodes/logs?peer_id=Qmd5K38Yti1NStacv7fjJwsXDCUZcf1ioKcAuFkq88RKtx&limit=1&msg=tracing.profiling&target=pallet_babe&start_time=2020-03-25T13:17:09.008533`**
+  - recent log messages. Required params: `peer_id`, Optional params: `msg, target, start_time, end_time, limit`
 - **`/reputation/{peer_id}`**
   - reported reputation for `peer_id` from the POV of other nodes
 - **`/reputation/logged`**
@@ -71,7 +63,7 @@ Optionally specify the following environment variables:
 
 - `HEARTBEAT_INTERVAL` (default: 5)
 - `CLIENT_TIMEOUT_S` (default: 10)
-- `PURGE_FREQUENCY` (default: 600)
+- `PURGE_INTERVAL_S` (default: 600)
 - `LOG_EXPIRY_H`  (default: 280320)
 - `MAX_PENDING_CONNECTIONS` (default: 8192)
 - `WS_MAX_PAYLOAD` (default: 524_288)
@@ -79,6 +71,10 @@ Optionally specify the following environment variables:
 - `DB_POOL_SIZE` (default: `NUM_THREADS`)
 - `DB_BATCH_SIZE` (default: 1024) - batch size for insert
 - `DB_SAVE_LATENCY_MS` (default: 100) - max latency (ms) for insert
+- `CACHE_UPDATE_TIMEOUT_S` (default: 15) - seconds before timeout warning - aborts update after 4* timeout
+- `CACHE_UPDATE_INTERVAL_MS` (default: 1000) - time interval (ms) between updates
+- `CACHE_EXPIRY_S` (default: 3600) - expiry time (s) of log messages
+- `ASSETS_PATH` (default: `./static`) - static files path
 
 To allow logging you must set:
 
