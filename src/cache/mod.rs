@@ -155,15 +155,22 @@ impl Cache {
     fn purge_expired(&mut self) {
         let expiry_time = time_secs_ago((*CACHE_EXPIRY_S).into());
         for (_, pmc) in &mut self.cache {
-            let idx: i64 = match pmc
-                .deque
-                .binary_search_by(|item| item.created_at.cmp(&expiry_time))
-            {
-                Ok(n) => n as i64,
-                _ => 0,
+            if pmc.deque.is_empty() {
+                continue;
             };
-            let new_len = (pmc.deque.len() as i64 - idx) as usize;
-            pmc.deque.truncate(new_len);
+            let mut idx = 0;
+            for (n, sl) in pmc.deque.iter().enumerate() {
+                let ms_since = sl
+                    .created_at
+                    .signed_duration_since(expiry_time)
+                    .num_milliseconds();
+                if ms_since > 0 {
+                    idx = n;
+                    break;
+                }
+            }
+            let new_len = pmc.deque.len() - idx;
+            pmc.deque.truncate_front(new_len);
         }
     }
 }
@@ -508,13 +515,17 @@ mod tests {
             peer_id: "Peer 1".to_string(),
             msg: "Message 1".to_string(),
         };
-        let t1 = time_secs_ago(((*CACHE_EXPIRY_S * 3600) + 1).into());
-        let t2 = time_secs_ago(((*CACHE_EXPIRY_S * 3600) - 1).into());
+        let t1 = time_secs_ago(((*CACHE_EXPIRY_S) + 1).into());
+        let t2 = time_secs_ago(((*CACHE_EXPIRY_S) - 1).into());
         let sl1 = SubstrateLog {
             log: Default::default(),
             created_at: t1,
         };
         let sl2 = SubstrateLog {
+            log: Default::default(),
+            created_at: t2.clone(),
+        };
+        let sl3 = SubstrateLog {
             log: Default::default(),
             created_at: t2,
         };
@@ -523,15 +534,15 @@ mod tests {
             .get_mut(&k)
             .unwrap()
             .deque
-            .append(&mut vec![sl1][..].into());
+            .append(&mut vec![sl1, sl2][..].into());
         cache
             .cache
             .get_mut(&k)
             .unwrap()
             .deque
-            .append(&mut vec![sl2][..].into());
-        assert_eq!(cache.cache.get(&k).unwrap().deque.len(), 2);
+            .append(&mut vec![sl3][..].into());
+        assert_eq!(cache.cache.get(&k).unwrap().deque.len(), 3);
         cache.purge_expired();
-        assert_eq!(cache.cache.get(&k).unwrap().deque.len(), 1);
+        assert_eq!(cache.cache.get(&k).unwrap().deque.len(), 2);
     }
 }
