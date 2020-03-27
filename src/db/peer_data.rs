@@ -103,7 +103,7 @@ impl DbExecutor {
             .unwrap_or_else(|| NaiveDateTime::from_timestamp(0, 0));
         match self.with_connection(|conn| {
             let query = sql_query(
-                "SELECT sl.logs as log, \
+                "SELECT sl.logs - 'ts' - 'id' - 'msg' - 'level' - 'line' as log, \
                  sl.created_at \
                  FROM substrate_logs sl \
                  LEFT JOIN peer_connections pc ON sl.peer_connection_id = pc.id \
