@@ -2,13 +2,14 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>Substrate Analytics - Live - Single Node (Detail)</title>
+    <title>Substrate Analytics - Live Feed</title>
     <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bulma@0.8.0/css/bulma.min.css">
     <link rel=stylesheet href=https://cdn.jsdelivr.net/npm/pretty-print-json@0.2/dist/pretty-print-json.css>
     <script src=https://cdn.jsdelivr.net/npm/pretty-print-json@0.2/dist/pretty-print-json.min.js></script>
     <script src="https://cdn.plot.ly/plotly-latest.min.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/moment.js/2.24.0/moment.min.js" integrity="sha256-4iQZ6BVL4qNKlQ27TExEhBN1HFPvAvAMbFavKKosSWQ=" crossorigin="anonymous"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/moment.js/2.24.0/moment.min.js"
+            integrity="sha256-4iQZ6BVL4qNKlQ27TExEhBN1HFPvAvAMbFavKKosSWQ=" crossorigin="anonymous"></script>
 </head>
 <body>
 
@@ -18,7 +19,7 @@
         <div class="navbar-start">
             <div class=" navbar-item">
                 <h1 class="title">
-                    Substrate Analytics | Live - Single Node (Detail)
+                    Substrate Analytics | Live Feed
                 </h1>
             </div>
 
@@ -131,6 +132,7 @@
             this.interest = interest;
         }
     }
+
     let nodes = new Map();
     const nodeSelect = document.querySelector('#node-select');
     nodeSelect.addEventListener('change', (event) => {
@@ -148,16 +150,30 @@
         document.getElementById('graphs').innerHTML = '';
         peerId = document.getElementById('node-select').value;
         let start_time = moment().subtract(minutesToShow, 'minutes').format('YYYY-MM-DD[T]HH:mm:ss.SSSSSS');
-        let subscription = new PeerMessageSubscription(peerId, 'tracing.profiling', start_time, 'subscribe' );
-        let subscription2 = new PeerMessageSubscription(peerId, 'system.interval', moment().format('YYYY-MM-DD[T]HH:mm:ss.SSSSSS'), 'subscribe' );
+        let subscription = new PeerMessageSubscription(peerId, 'tracing.profiling', start_time, 'subscribe');
+        let subscription2 = new PeerMessageSubscription(peerId, 'system.interval', moment().format('YYYY-MM-DD[T]HH:mm:ss.SSSSSS'), 'subscribe');
         socket.send(JSON.stringify(subscription));
         socket.send(JSON.stringify(subscription2));
+        loadNodeConnected(peerId);
+    }
+
+    function loadNodeConnected(peerId) {
+        let request = new Request(`/nodes/logs?peer_id=${peerId}&msg=system.connected`);
+        fetch(request)
+            .then(response => response.json())
+            .then(json => {
+                let connected = json[json.length - 1].logs;
+                document.getElementById('system-name').innerHTML = connected.name;
+                document.getElementById('system-chain').innerHTML = connected.chain;
+                document.getElementById('system-authority').innerHTML = connected.authority;
+                document.getElementById('system-started').innerHTML = new Date(parseInt(connected.startup_time)).toISOString() ;
+            });
     }
 
     function stopFeed() {
-        let subscription = new PeerMessageSubscription(peerId, 'tracing.profiling', "", 'unsubscribe' );
+        let subscription = new PeerMessageSubscription(peerId, 'tracing.profiling', "", 'unsubscribe');
         socket.send(JSON.stringify(subscription));
-        let subscription2 = new PeerMessageSubscription(peerId, 'system.interval', "", 'unsubscribe' );
+        let subscription2 = new PeerMessageSubscription(peerId, 'system.interval', "", 'unsubscribe');
         socket.send(JSON.stringify(subscription2));
     }
 
@@ -216,7 +232,7 @@
             }
             let nameMap = traceData.get(element.log.name);
             if (!nameMap.has(element.log.target)) {
-                nameMap.set(element.log.target, [[],[],[]]);
+                nameMap.set(element.log.target, [[], [], []]);
             }
             let arr = nameMap.get(element.log.target);
             arr[0].push(new Date(element.created_at));
@@ -262,7 +278,7 @@
             }
             let layout = {
                 title: name,
-                yaxis: { title: "Execution time (ns)"},
+                yaxis: {title: "Execution time (ns)"},
                 datarevision: moment()
             };
             let graphName = `graph-${name}`;
@@ -280,16 +296,16 @@
         }
     }
 
-    socket.onmessage = function(event) {
+    socket.onmessage = function (event) {
         console.log(`message received`);
         processData(event.data);
     };
 
-    socket.onopen = function(e) {
+    socket.onopen = function (e) {
         console.log("Connection established");
     };
 
-    socket.onclose = function(event) {
+    socket.onclose = function (event) {
         if (event.wasClean) {
             console.log(`Connection closed cleanly, code=${event.code} reason=${event.reason}`);
         } else {
@@ -297,7 +313,7 @@
         }
     };
 
-    socket.onerror = function(error) {
+    socket.onerror = function (error) {
         console.log(`Error: ${error.message}`);
     };
 </script>
