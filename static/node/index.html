@@ -52,6 +52,64 @@
         </div>
     </div>
 </nav>
+<!--<section class="section">-->
+<!--    <div class="container is-fluid">-->
+<!--        <div class="columns is-desktop" id="system_info">-->
+<!--            -->
+<!--        </div>-->
+<!--    </div>-->
+<!--</section>-->
+
+<nav class="level">
+    <div class="level-item has-text-centered">
+        <div>
+            <p class="heading">Name</p>
+            <p class="title" id="system-name"></p>
+        </div>
+    </div>
+    <div class="level-item has-text-centered">
+        <div>
+            <p class="heading">Chain</p>
+            <p class="title" id="system-chain"></p>
+        </div>
+    </div>
+    <div class="level-item has-text-centered">
+        <div>
+            <p class="heading">Authority</p>
+            <p class="title" id="system-authority"></p>
+        </div>
+    </div>
+    <div class="level-item has-text-centered">
+        <div>
+            <p class="heading">Started</p>
+            <p class="title" id="system-started"></p>
+        </div>
+    </div>
+    <div class="level-item has-text-centered">
+        <div>
+            <p class="heading">CPU</p>
+            <p class="title" id="system-cpu"></p>
+        </div>
+    </div>
+    <div class="level-item has-text-centered">
+        <div>
+            <p class="heading">Memory</p>
+            <p class="title" id="system-memory"></p>
+        </div>
+    </div>
+    <div class="level-item has-text-centered">
+        <div>
+            <p class="heading">Peers</p>
+            <p class="title" id="system-peers"></p>
+        </div>
+    </div>
+    <div class="level-item has-text-centered">
+        <div>
+            <p class="heading">Height</p>
+            <p class="title" id="system-height"></p>
+        </div>
+    </div>
+</nav>
 
 <template id="graph-template">
     <div class="container is-fluid"></div>
@@ -65,7 +123,7 @@
 
     let peerId = "";
 
-    class Subscription {
+    class PeerMessageSubscription {
         constructor(peer_id, msg, start_time, interest) {
             this.peer_id = peer_id;
             this.msg = msg;
@@ -90,13 +148,17 @@
         document.getElementById('graphs').innerHTML = '';
         peerId = document.getElementById('node-select').value;
         let start_time = moment().subtract(minutesToShow, 'minutes').format('YYYY-MM-DD[T]HH:mm:ss.SSSSSS');
-        let subscription = new Subscription(peerId, 'tracing.profiling', start_time, 'subscribe' );
+        let subscription = new PeerMessageSubscription(peerId, 'tracing.profiling', start_time, 'subscribe' );
+        let subscription2 = new PeerMessageSubscription(peerId, 'system.interval', moment().format('YYYY-MM-DD[T]HH:mm:ss.SSSSSS'), 'subscribe' );
         socket.send(JSON.stringify(subscription));
+        socket.send(JSON.stringify(subscription2));
     }
 
     function stopFeed() {
-        let subscription = new Subscription(peerId, 'tracing.profiling', "", 'unsubscribe' );
+        let subscription = new PeerMessageSubscription(peerId, 'tracing.profiling', "", 'unsubscribe' );
         socket.send(JSON.stringify(subscription));
+        let subscription2 = new PeerMessageSubscription(peerId, 'system.interval', "", 'unsubscribe' );
+        socket.send(JSON.stringify(subscription2));
     }
 
     function loadNodes() {
@@ -126,10 +188,28 @@
 
     function processData(data) {
         let json = JSON.parse(data);
-        if (json.peer_message.msg !== "tracing.profiling") {
-            console.log(`Message received: ${json.peer_message.msg}`)
-            return;
+
+        switch (json.peer_message.msg) {
+            case "tracing.profiling":
+                processTracing(json);
+                break;
+            case "system.interval":
+                processInterval(json);
+                break;
+            default:
+                console.log(`Message received: ${json.peer_message.msg}`);
         }
+    }
+
+    function processInterval(json) {
+        let interval = json.data[json.data.length - 1].log;
+        document.getElementById('system-cpu').innerHTML = interval.cpu;
+        document.getElementById('system-memory').innerHTML = interval.memory;
+        document.getElementById('system-height').innerHTML = interval.height;
+        document.getElementById('system-peers').innerHTML = interval.peers;
+    }
+
+    function processTracing(json) {
         for (const element of json.data) {
             if (!traceData.has(element.log.name)) {
                 traceData.set(element.log.name, new Map());
