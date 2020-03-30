@@ -16,7 +16,7 @@
 
 use crate::db::{
     peer_data::{
-        time_secs_ago, PeerDataResponse, PeerMessage, PeerMessageTime, PeerMessageTimeList,
+        time_secs_ago, PeerDataArray, PeerMessage, PeerMessageTime, PeerMessageTimeList,
         PeerMessages, SubstrateLog,
     },
     DbExecutor,
@@ -80,7 +80,7 @@ impl Cache {
 /// - Cleaning out data when it's older than `CACHE_EXPIRY_S`
 pub struct Cache {
     cache: HashMap<PeerMessage, PeerMessageCache>,
-    subscribers: HashMap<Recipient<PeerDataResponse>, PeerMessages>,
+    subscribers: HashMap<Recipient<PeerDataArray>, PeerMessages>,
     db_arbiter: Addr<DbExecutor>,
 }
 
@@ -140,7 +140,7 @@ impl Cache {
         }
         let pmstl = PeerMessageTimeList {
             list: pmsts,
-            cache: ctx.address().recipient::<PeerDataResponse>(),
+            cache: ctx.address().recipient::<PeerDataArray>(),
         };
         let fut = self.db_arbiter.send(pmstl).map(|r| match r {
             Err(e) => error!(
@@ -175,17 +175,17 @@ impl Cache {
     }
 }
 
-impl Handler<PeerDataResponse> for Cache {
+impl Handler<PeerDataArray> for Cache {
     type Result = Result<(), &'static str>;
 
-    fn handle(&mut self, msg: PeerDataResponse, _ctx: &mut Self::Context) -> Self::Result {
+    fn handle(&mut self, msg: PeerDataArray, _ctx: &mut Self::Context) -> Self::Result {
         self.process_peer_data_response(msg);
         Ok(())
     }
 }
 
 impl Cache {
-    fn process_peer_data_response(&mut self, msg: PeerDataResponse) {
+    fn process_peer_data_response(&mut self, msg: PeerDataArray) {
         let updates_in_progress = self.updates_in_progress();
         // Check that we are expecting this update
         if updates_in_progress
@@ -260,7 +260,7 @@ impl Cache {
                 }
             };
             let response_data = peer_data.deque[idx..].to_vec();
-            let pdr = PeerDataResponse {
+            let pdr = PeerDataArray {
                 peer_message: peer_message.clone(),
                 data: response_data,
             };
@@ -308,7 +308,7 @@ pub enum Interest {
 pub struct Subscription {
     pub peer_id: String,
     pub msg: String,
-    pub subscriber_addr: Recipient<PeerDataResponse>,
+    pub subscriber_addr: Recipient<PeerDataArray>,
     pub start_time: Option<NaiveDateTime>,
     pub interest: Interest,
 }
@@ -340,7 +340,7 @@ impl Cache {
         &mut self,
         peer_id: String,
         msg: String,
-        subscriber_addr: Recipient<PeerDataResponse>,
+        subscriber_addr: Recipient<PeerDataArray>,
         start_time: Option<NaiveDateTime>,
     ) {
         let last_updated = start_time.unwrap_or(time_secs_ago(0));
@@ -362,7 +362,7 @@ impl Cache {
         &mut self,
         peer_id: String,
         msg: String,
-        subscriber_addr: Recipient<PeerDataResponse>,
+        subscriber_addr: Recipient<PeerDataArray>,
     ) {
         if let Some(peer_messages) = self.subscribers.get_mut(&subscriber_addr) {
             let peer_message = PeerMessage {
@@ -436,8 +436,8 @@ mod tests {
         cache.cache.insert(k, v);
     }
 
-    fn generate_peer_data_response1() -> PeerDataResponse {
-        PeerDataResponse {
+    fn generate_peer_data_response1() -> PeerDataArray {
+        PeerDataArray {
             peer_message: PeerMessage {
                 peer_id: "Peer 1".to_string(),
                 msg: "Message 1".to_string(),
@@ -449,8 +449,8 @@ mod tests {
         }
     }
 
-    fn generate_peer_data_response2() -> PeerDataResponse {
-        PeerDataResponse {
+    fn generate_peer_data_response2() -> PeerDataArray {
+        PeerDataArray {
             peer_message: PeerMessage {
                 peer_id: "Peer 2".to_string(),
                 msg: "Message 2".to_string(),

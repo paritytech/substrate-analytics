@@ -36,12 +36,12 @@ pub struct SubstrateLog {
 }
 
 #[derive(Serialize, Debug)]
-pub struct PeerDataResponse {
+pub struct PeerDataArray {
     pub peer_message: PeerMessage,
     pub data: Vec<SubstrateLog>,
 }
 
-impl Message for PeerDataResponse {
+impl Message for PeerDataArray {
     type Result = Result<(), &'static str>;
 }
 
@@ -61,7 +61,7 @@ pub struct PeerMessageTime {
 #[derive(Debug)]
 pub struct PeerMessageTimeList {
     pub list: Vec<PeerMessageTime>,
-    pub cache: Recipient<PeerDataResponse>,
+    pub cache: Recipient<PeerDataArray>,
 }
 
 impl Message for PeerMessageTimeList {
@@ -95,7 +95,7 @@ impl Handler<PeerMessageTimeList> for DbExecutor {
 }
 
 impl DbExecutor {
-    fn get_logs(&self, filters: Filters) -> Result<PeerDataResponse, failure::Error> {
+    fn get_logs(&self, filters: Filters) -> Result<PeerDataArray, failure::Error> {
         let peer_id = filters.peer_id.clone().unwrap_or(String::new());
         let msg = filters.msg.clone().unwrap_or(String::new());
         let start_time = filters
@@ -126,7 +126,7 @@ impl DbExecutor {
         }) {
             Ok(Ok(data)) => {
                 let peer_message = PeerMessage { peer_id, msg };
-                Ok(PeerDataResponse { peer_message, data })
+                Ok(PeerDataArray { peer_message, data })
             }
             Ok(Err(e)) => Err(e.into()),
             Err(e) => Err(e.into()),
