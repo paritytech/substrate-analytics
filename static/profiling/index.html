@@ -2,14 +2,13 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>Substrate Analytics - Live Feed</title>
+    <title>Substrate Analytics - Live Profiling</title>
     <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bulma@0.8.0/css/bulma.min.css">
     <link rel=stylesheet href=https://cdn.jsdelivr.net/npm/pretty-print-json@0.2/dist/pretty-print-json.css>
     <script src=https://cdn.jsdelivr.net/npm/pretty-print-json@0.2/dist/pretty-print-json.min.js></script>
     <script src="https://cdn.plot.ly/plotly-latest.min.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/moment.js/2.24.0/moment.min.js"
-            integrity="sha256-4iQZ6BVL4qNKlQ27TExEhBN1HFPvAvAMbFavKKosSWQ=" crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/luxon@1.22.2/build/global/luxon.min.js" integrity="sha256-cnTIO3/prqlJsQYnbM4KpDvQHqTRGDz2QQlYJ8f8bmY=" crossorigin="anonymous"></script>
 </head>
 <body>
 
@@ -19,25 +18,73 @@
         <div class="navbar-start">
             <div class=" navbar-item">
                 <h1 class="title">
-                    Substrate Analytics | Live Feed
+                    Live Profiling
                 </h1>
             </div>
 
             <div class="navbar-item">
                 <div class="field">
                     <div class="control">
+                        <p class="heading">Node</p>
                         <div class="select">
                             <select id="node-select">
+                            </select>
+                         </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="navbar-item">
+                <div class="field">
+                    <div class="control">
+                        <p class="heading">Aggregate type</p>
+                        <div class="select">
+                            <select id="aggregate">
+                                <option value="none">No aggregatation</option>
+                                <option value="min">Min</option>
+                                <option value="max">Max</option>
+                                <option value="mean">Mean</option>
+                                <option value="meadian">Median</option>
+                                <option value="percentile90">90th Percentile</option>
                             </select>
                         </div>
                     </div>
                 </div>
             </div>
 
+            <div class="navbar-item">
+                <div class="field">
+                    <div class="field-body">
+                        <div class="field">
+                            <div class="control">
+                                <p class="heading">Aggregate interval (s)</p>
+                                <input id="aggregate-interval" class="input" type="text" placeholder="Agg. interval (s)">
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="navbar-item">
+                <div class="field">
+                    <div class="field-body">
+                        <div class="field">
+                            <div class="control">
+                                <p class="heading">Mins to show (default: 5)</p>
+                                <input id="minutes-to-show" class="input" type="text" placeholder="Mins to show">
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+
+
 
             <div class="navbar-item">
                 <div class="field">
                     <div class="control">
+                        <p class="heading">&nbsp;</p>
                         <button class="button is-primary" onclick="initialiseFeed()">View</button>
                     </div>
                 </div>
@@ -45,6 +92,7 @@
             <div class="navbar-item">
                 <div class="field">
                     <div class="control">
+                        <p class="heading">&nbsp;</p>
                         <button class="button is-secondary" onclick="stopFeed()">Cancel</button>
                     </div>
                 </div>
@@ -120,7 +168,7 @@
 </section>
 
 <script>
-    const minutesToShow = 5;
+    let minutesToShow = 5;
 
     let peerId = "";
 
@@ -149,9 +197,17 @@
         }
         document.getElementById('graphs').innerHTML = '';
         peerId = document.getElementById('node-select').value;
-        let start_time = moment().subtract(minutesToShow, 'minutes').format('YYYY-MM-DD[T]HH:mm:ss.SSSSSS');
+
+        let mins = parseInt(document.getElementById('minutes-to-show').value);
+        if (isNaN(mins)) {
+            console.log("Could not parse minutes-to-show, using default: 5");
+            minutesToShow = 5;
+        } else {
+            minutesToShow = mins;
+        }
+        let start_time = luxon.DateTime.local().toUTC().minus({minutes: minutesToShow}).toFormat("yyyy-MM-dd'T'HH:mm:ss.SSS");
         let subscription = new PeerMessageSubscription(peerId, 'tracing.profiling', start_time, 'subscribe');
-        let subscription2 = new PeerMessageSubscription(peerId, 'system.interval', moment().format('YYYY-MM-DD[T]HH:mm:ss.SSSSSS'), 'subscribe');
+        let subscription2 = new PeerMessageSubscription(peerId, 'system.interval', luxon.DateTime.local().toUTC().toFormat("yyyy-MM-dd'T'HH:mm:ss.SSS"), 'subscribe');
         socket.send(JSON.stringify(subscription));
         socket.send(JSON.stringify(subscription2));
         loadNodeConnected(peerId);
@@ -166,7 +222,7 @@
                 document.getElementById('system-name').innerHTML = connected.name;
                 document.getElementById('system-chain').innerHTML = connected.chain;
                 document.getElementById('system-authority').innerHTML = connected.authority;
-                document.getElementById('system-started').innerHTML = new Date(parseInt(connected.startup_time)).toISOString() ;
+                document.getElementById('system-started').innerHTML = new Date(parseInt(connected.startup_time)).toISOString();
             });
     }
 
@@ -188,7 +244,8 @@
             .then(json => {
                 for (const node of json) {
                     nodes.set(node.id, node);
-                    const opt = new Option(node.peer_id, node.peer_id);
+                    let peer_id_abbr = `${node.peer_id.substring(0,6)}...${node.peer_id.substring(node.peer_id.length - 6, node.peer_id.length)}`;
+                    const opt = new Option(peer_id_abbr, node.peer_id);
                     nodeSelect.options.add(opt);
                 }
             });
@@ -252,7 +309,7 @@
     }
 
     function getTruncateIndex(arr, name) {
-        const start_time = moment().subtract(minutesToShow, 'minutes').toDate();
+        const start_time = new Date(luxon.DateTime.local().toUTC().minus({minutes: minutesToShow}).toFormat("yyyy-MM-dd'T'HH:mm:ss.SSS"));
 
         for (let i = 0; i < arr.length; i++) {
             if (arr[i] > start_time) {
@@ -279,7 +336,7 @@
             let layout = {
                 title: name,
                 yaxis: {title: "Execution time (ns)"},
-                datarevision: moment()
+                datarevision: Date.now()
             };
             let graphName = `graph-${name}`;
             if (!document.getElementById(graphName)) {
