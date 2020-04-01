@@ -39,12 +39,12 @@
                     <div class="control">
                         <p class="heading">Aggregate type</p>
                         <div class="select">
-                            <select id="aggregate">
-                                <option value="none">No aggregatation</option>
+                            <select id="aggregate-type">
+                                <option value="">No aggregatation</option>
                                 <option value="min">Min</option>
                                 <option value="max">Max</option>
                                 <option value="mean">Mean</option>
-                                <option value="meadian">Median</option>
+                                <option value="median">Median</option>
                                 <option value="percentile90">90th Percentile</option>
                             </select>
                         </div>
@@ -173,11 +173,14 @@
     let peerId = "";
 
     class PeerMessageSubscription {
-        constructor(peer_id, msg, start_time, interest) {
+        constructor(peer_id, msg, aggregate_type, aggregate_interval, start_time, interest) {
             this.peer_id = peer_id;
             this.msg = msg;
+            this.aggregate_type = aggregate_type;
+            this.aggregate_interval = aggregate_interval;
             this.start_time = start_time;
             this.interest = interest;
+            this.aggregate_key = 'time'; // Because we're doing profiling here, we want to aggregate the time field
         }
     }
 
@@ -206,8 +209,20 @@
             minutesToShow = mins;
         }
         let start_time = luxon.DateTime.local().toUTC().minus({minutes: minutesToShow}).toFormat("yyyy-MM-dd'T'HH:mm:ss.SSS");
-        let subscription = new PeerMessageSubscription(peerId, 'tracing.profiling', start_time, 'subscribe');
-        let subscription2 = new PeerMessageSubscription(peerId, 'system.interval', luxon.DateTime.local().toUTC().toFormat("yyyy-MM-dd'T'HH:mm:ss.SSS"), 'subscribe');
+        let subscription = new PeerMessageSubscription(
+            peerId,
+            'tracing.profiling',
+            document.getElementById('aggregate-type').value,
+            parseInt(document.getElementById('aggregate-interval').value),
+            start_time,
+            'subscribe');
+        let subscription2 = new PeerMessageSubscription(
+            peerId,
+            'system.interval',
+            '',
+            '',
+            luxon.DateTime.local().toUTC().toFormat("yyyy-MM-dd'T'HH:mm:ss.SSS"),
+            'subscribe');
         socket.send(JSON.stringify(subscription));
         socket.send(JSON.stringify(subscription2));
         loadNodeConnected(peerId);
@@ -227,9 +242,21 @@
     }
 
     function stopFeed() {
-        let subscription = new PeerMessageSubscription(peerId, 'tracing.profiling', "", 'unsubscribe');
+        let subscription = new PeerMessageSubscription(
+            peerId,
+            'tracing.profiling',
+            "",
+            "",
+            "",
+            'unsubscribe');
         socket.send(JSON.stringify(subscription));
-        let subscription2 = new PeerMessageSubscription(peerId, 'system.interval', "", 'unsubscribe');
+        let subscription2 = new PeerMessageSubscription(
+            peerId,
+            'system.interval',
+            "",
+            "",
+            "",
+            'unsubscribe');
         socket.send(JSON.stringify(subscription2));
     }
 
@@ -261,7 +288,10 @@
 
     function processData(data) {
         let json = JSON.parse(data);
-
+        if (!json.hasOwnProperty('peer_message') || ! json['peer_message'].hasOwnProperty('msg')) {
+            console.log(json);
+            return;
+        }
         switch (json.peer_message.msg) {
             case "tracing.profiling":
                 processTracing(json);
@@ -275,7 +305,7 @@
     }
 
     function processInterval(json) {
-        let interval = json.data[json.data.length - 1].log;
+        let interval = json.data[json.data.length - 1]
         document.getElementById('system-cpu').innerHTML = interval.cpu;
         document.getElementById('system-memory').innerHTML = interval.memory;
         document.getElementById('system-height').innerHTML = interval.height;
@@ -284,17 +314,17 @@
 
     function processTracing(json) {
         for (const element of json.data) {
-            if (!traceData.has(element.log.name)) {
-                traceData.set(element.log.name, new Map());
+            if (!traceData.has(element.name)) {
+                traceData.set(element.name, new Map());
             }
-            let nameMap = traceData.get(element.log.name);
-            if (!nameMap.has(element.log.target)) {
-                nameMap.set(element.log.target, [[], [], []]);
+            let nameMap = traceData.get(element.name);
+            if (!nameMap.has(element.target)) {
+                nameMap.set(element.target, [[], [], []]);
             }
-            let arr = nameMap.get(element.log.target);
+            let arr = nameMap.get(element.target);
             arr[0].push(new Date(element.created_at));
-            arr[1].push(element.log.time);
-            arr[2].push(`Values: ${JSON.stringify(element.log.values)}`);
+            arr[1].push(element.time);
+            arr[2].push(`Values: ${JSON.stringify(element.values)}`);
         }
         updatePlots();
     }

@@ -298,13 +298,13 @@ impl Cache {
     }
 }
 
-#[derive(Debug)]
+#[derive(Eq, PartialEq, Debug, Clone)]
 pub enum Interest {
     Subscribe,
     Unsubscribe,
 }
 
-#[derive(Debug)]
+#[derive(Eq, PartialEq, Debug, Clone)]
 pub struct Subscription {
     pub peer_id: String,
     pub msg: String,

@@ -15,21 +15,21 @@
 // along with Substrate Analytics.  If not, see <http://www.gnu.org/licenses/>.
 
 use actix::prelude::*;
-use chrono::NaiveDateTime;
+use chrono::{DateTime, Local, NaiveDateTime};
 use diesel::sql_types::*;
 use diesel::{result::QueryResult, sql_query, RunQueryDsl};
 use serde::Serialize;
 use serde_json::Value;
 use std::collections::HashMap;
-use std::convert::TryInto;
 use std::hash::Hash;
-use std::time::{Duration, SystemTime, UNIX_EPOCH};
+use std::time::{Duration, SystemTime};
 
 use super::{filters::Filters, DbExecutor, RECORD_LIMIT};
 
 #[derive(Serialize, Deserialize, QueryableByName, Clone, Debug)]
 pub struct SubstrateLog {
     #[sql_type = "Jsonb"]
+    #[serde(flatten)]
     pub log: Value,
     #[sql_type = "Timestamp"]
     pub created_at: NaiveDateTime,
@@ -139,10 +139,12 @@ pub fn time_secs_ago(seconds_ago: u64) -> NaiveDateTime {
     let ts = now
         .checked_sub(Duration::from_secs(seconds_ago))
         .expect("We should be using sane values for default_start_time");
-    let ds = ts
-        .duration_since(UNIX_EPOCH)
-        .expect("We should be using sane values for default_start_time");
-    NaiveDateTime::from_timestamp((ds.as_secs() as u64).try_into().unwrap(), 0)
+    let dt: DateTime<Local> = ts.into();
+    dt.naive_utc()
+    //    let ds = ts
+    //        .duration_since(UNIX_EPOCH)
+    //        .expect("We should be using sane values for default_start_time");
+    //    NaiveDateTime::from_timestamp((ds.as_secs() as u64).try_into().unwrap(), 0)
 }
 
 impl std::fmt::Display for PeerMessage {
