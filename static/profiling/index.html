@@ -1,0 +1,408 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Substrate Analytics - Live Profiling</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bulma@0.8.0/css/bulma.min.css">
+    <link rel=stylesheet href=https://cdn.jsdelivr.net/npm/pretty-print-json@0.2/dist/pretty-print-json.css>
+    <script src=https://cdn.jsdelivr.net/npm/pretty-print-json@0.2/dist/pretty-print-json.min.js></script>
+    <script src="https://cdn.plot.ly/plotly-latest.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/luxon@1.22.2/build/global/luxon.min.js" integrity="sha256-cnTIO3/prqlJsQYnbM4KpDvQHqTRGDz2QQlYJ8f8bmY=" crossorigin="anonymous"></script>
+</head>
+<body>
+
+
+<nav class="navbar" role="navigation" aria-label="main navigation">
+    <div class="navbar-menu is-active">
+        <div class="navbar-start">
+            <div class=" navbar-item">
+                <h1 class="title">
+                    Live Profiling
+                </h1>
+            </div>
+
+            <div class="navbar-item">
+                <div class="field">
+                    <div class="control">
+                        <p class="heading">Node</p>
+                        <div class="select">
+                            <select id="node-select">
+                            </select>
+                         </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="navbar-item">
+                <div class="field">
+                    <div class="control">
+                        <p class="heading">Aggregate type</p>
+                        <div class="select">
+                            <select id="aggregate-type">
+                                <option value="">No aggregatation</option>
+                                <option value="min">Min</option>
+                                <option value="max">Max</option>
+                                <option value="mean">Mean</option>
+                                <option value="median">Median</option>
+                                <option value="percentile90">90th Percentile</option>
+                            </select>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="navbar-item">
+                <div class="field">
+                    <div class="field-body">
+                        <div class="field">
+                            <div class="control">
+                                <p class="heading">Aggregate interval (s)</p>
+                                <input id="aggregate-interval" class="input" type="text" placeholder="Agg. interval (s)">
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="navbar-item">
+                <div class="field">
+                    <div class="field-body">
+                        <div class="field">
+                            <div class="control">
+                                <p class="heading">Mins to show (default: 5)</p>
+                                <input id="minutes-to-show" class="input" type="text" placeholder="Mins to show">
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+
+
+
+            <div class="navbar-item">
+                <div class="field">
+                    <div class="control">
+                        <p class="heading">&nbsp;</p>
+                        <button class="button is-primary" onclick="initialiseFeed()">View</button>
+                    </div>
+                </div>
+            </div>
+            <div class="navbar-item">
+                <div class="field">
+                    <div class="control">
+                        <p class="heading">&nbsp;</p>
+                        <button class="button is-secondary" onclick="stopFeed()">Cancel</button>
+                    </div>
+                </div>
+            </div>
+
+        </div>
+    </div>
+</nav>
+<!--<section class="section">-->
+<!--    <div class="container is-fluid">-->
+<!--        <div class="columns is-desktop" id="system_info">-->
+<!--            -->
+<!--        </div>-->
+<!--    </div>-->
+<!--</section>-->
+
+<nav class="level">
+    <div class="level-item has-text-centered">
+        <div>
+            <p class="heading">Name</p>
+            <p class="title" id="system-name"></p>
+        </div>
+    </div>
+    <div class="level-item has-text-centered">
+        <div>
+            <p class="heading">Chain</p>
+            <p class="title" id="system-chain"></p>
+        </div>
+    </div>
+    <div class="level-item has-text-centered">
+        <div>
+            <p class="heading">Authority</p>
+            <p class="title" id="system-authority"></p>
+        </div>
+    </div>
+    <div class="level-item has-text-centered">
+        <div>
+            <p class="heading">Started</p>
+            <p class="title" id="system-started"></p>
+        </div>
+    </div>
+    <div class="level-item has-text-centered">
+        <div>
+            <p class="heading">CPU</p>
+            <p class="title" id="system-cpu"></p>
+        </div>
+    </div>
+    <div class="level-item has-text-centered">
+        <div>
+            <p class="heading">Memory</p>
+            <p class="title" id="system-memory"></p>
+        </div>
+    </div>
+    <div class="level-item has-text-centered">
+        <div>
+            <p class="heading">Peers</p>
+            <p class="title" id="system-peers"></p>
+        </div>
+    </div>
+    <div class="level-item has-text-centered">
+        <div>
+            <p class="heading">Height</p>
+            <p class="title" id="system-height"></p>
+        </div>
+    </div>
+</nav>
+
+<template id="graph-template">
+    <div class="container is-fluid"></div>
+</template>
+
+<section class="section" id="graphs">
+</section>
+
+<script>
+    let minutesToShow = 5;
+
+    let peerId = "";
+
+    class PeerMessageSubscription {
+        constructor(peer_id, msg, aggregate_type, aggregate_interval, start_time, interest) {
+            this.peer_id = peer_id;
+            this.msg = msg;
+            this.aggregate_type = aggregate_type;
+            this.aggregate_interval = aggregate_interval;
+            this.start_time = start_time;
+            this.interest = interest;
+            this.aggregate_key = 'time'; // Because we're doing profiling here, we want to aggregate the time field
+        }
+    }
+
+    let nodes = new Map();
+    const nodeSelect = document.querySelector('#node-select');
+    nodeSelect.addEventListener('change', (event) => {
+
+    });
+
+    function initialiseFeed() {
+        stopFeed();
+        traceData.clear();
+        plots = document.getElementsByClassName("node-graph");
+        for (let plot of plots) {
+            Plotly.newPlot(plot.id)
+            Plotly.purge(plot.id);
+        }
+        document.getElementById('graphs').innerHTML = '';
+        peerId = document.getElementById('node-select').value;
+
+        let mins = parseInt(document.getElementById('minutes-to-show').value);
+        if (isNaN(mins)) {
+            console.log("Could not parse minutes-to-show, using default: 5");
+            minutesToShow = 5;
+        } else {
+            minutesToShow = mins;
+        }
+        let start_time = luxon.DateTime.local().toUTC().minus({minutes: minutesToShow}).toFormat("yyyy-MM-dd'T'HH:mm:ss.SSS");
+        let subscription = new PeerMessageSubscription(
+            peerId,
+            'tracing.profiling',
+            document.getElementById('aggregate-type').value,
+            parseInt(document.getElementById('aggregate-interval').value),
+            start_time,
+            'subscribe');
+        let subscription2 = new PeerMessageSubscription(
+            peerId,
+            'system.interval',
+            '',
+            '',
+            luxon.DateTime.local().toUTC().toFormat("yyyy-MM-dd'T'HH:mm:ss.SSS"),
+            'subscribe');
+        socket.send(JSON.stringify(subscription));
+        socket.send(JSON.stringify(subscription2));
+        loadNodeConnected(peerId);
+    }
+
+    function loadNodeConnected(peerId) {
+        let request = new Request(`/nodes/logs?peer_id=${peerId}&msg=system.connected`);
+        fetch(request)
+            .then(response => response.json())
+            .then(json => {
+                let connected = json[json.length - 1].logs;
+                document.getElementById('system-name').innerHTML = connected.name;
+                document.getElementById('system-chain').innerHTML = connected.chain;
+                document.getElementById('system-authority').innerHTML = connected.authority;
+                document.getElementById('system-started').innerHTML = new Date(parseInt(connected.startup_time)).toISOString();
+            });
+    }
+
+    function stopFeed() {
+        let subscription = new PeerMessageSubscription(
+            peerId,
+            'tracing.profiling',
+            "",
+            "",
+            "",
+            'unsubscribe');
+        socket.send(JSON.stringify(subscription));
+        let subscription2 = new PeerMessageSubscription(
+            peerId,
+            'system.interval',
+            "",
+            "",
+            "",
+            'unsubscribe');
+        socket.send(JSON.stringify(subscription2));
+    }
+
+    function loadNodes() {
+        nodeSelect.options.length = 0;
+        nodes.set(0, "Please select a node");
+        const opt = new Option("Please select a node", 0);
+        nodeSelect.options.add(opt);
+        let request = new Request('/nodes');
+        fetch(request)
+            .then(response => response.json())
+            .then(json => {
+                for (const node of json) {
+                    nodes.set(node.id, node);
+                    let peer_id_abbr = `${node.peer_id.substring(0,6)}...${node.peer_id.substring(node.peer_id.length - 6, node.peer_id.length)}`;
+                    const opt = new Option(peer_id_abbr, node.peer_id);
+                    nodeSelect.options.add(opt);
+                }
+            });
+    }
+
+    loadNodes();
+
+</script>
+
+<script>
+    let socket = new WebSocket(`ws://${window.location.host}/feed`);
+    let traceData = new Map();
+
+    function processData(data) {
+        let json = JSON.parse(data);
+        if (!json.hasOwnProperty('peer_message') || ! json['peer_message'].hasOwnProperty('msg')) {
+            console.log(json);
+            return;
+        }
+        switch (json.peer_message.msg) {
+            case "tracing.profiling":
+                processTracing(json);
+                break;
+            case "system.interval":
+                processInterval(json);
+                break;
+            default:
+                console.log(`Message received: ${json.peer_message.msg}`);
+        }
+    }
+
+    function processInterval(json) {
+        let interval = json.data[json.data.length - 1]
+        document.getElementById('system-cpu').innerHTML = interval.cpu;
+        document.getElementById('system-memory').innerHTML = interval.memory;
+        document.getElementById('system-height').innerHTML = interval.height;
+        document.getElementById('system-peers').innerHTML = interval.peers;
+    }
+
+    function processTracing(json) {
+        for (const element of json.data) {
+            if (!traceData.has(element.name)) {
+                traceData.set(element.name, new Map());
+            }
+            let nameMap = traceData.get(element.name);
+            if (!nameMap.has(element.target)) {
+                nameMap.set(element.target, [[], [], []]);
+            }
+            let arr = nameMap.get(element.target);
+            arr[0].push(new Date(element.created_at));
+            arr[1].push(element.time);
+            arr[2].push(`Values: ${JSON.stringify(element.values)}`);
+        }
+        updatePlots();
+    }
+
+    function expireOld(arrs, name) {
+        let idx = getTruncateIndex(arrs[0], name);
+        for (let arr of arrs) {
+            arr.reverse();
+            arr.splice(arr.length - idx, arr.length);
+            arr.reverse();
+        }
+    }
+
+    function getTruncateIndex(arr, name) {
+        const start_time = new Date(luxon.DateTime.local().toUTC().minus({minutes: minutesToShow}).toFormat("yyyy-MM-dd'T'HH:mm:ss.SSS"));
+
+        for (let i = 0; i < arr.length; i++) {
+            if (arr[i] > start_time) {
+                return i;
+            }
+        }
+    }
+
+    function updatePlots() {
+        for (const [name, targetMap] of traceData) {
+            let nameTraces = [];
+            for ([target, values] of targetMap) {
+                expireOld(values, `${name}::${target}`);
+                nameTraces.push({
+                    x: values[0],
+                    y: values[1],
+                    text: values[2],
+                    textposition: 'top',
+                    name: `${target}::${name}`,
+                    type: "scatter",
+                    mode: 'lines+markers'
+                });
+            }
+            let layout = {
+                title: name,
+                yaxis: {title: "Execution time (ns)"},
+                datarevision: Date.now()
+            };
+            let graphName = `graph-${name}`;
+            if (!document.getElementById(graphName)) {
+                let template = document.querySelector('#graph-template');
+                var node = template.content.cloneNode(true);
+                var divItem = node.querySelector('div');
+                divItem.id = graphName;
+                divItem.className = "node-graph";
+                document.getElementById('graphs').appendChild(node);
+                Plotly.newPlot(graphName, nameTraces, layout);
+            } else {
+                Plotly.react(graphName, nameTraces, layout);
+            }
+        }
+    }
+
+    socket.onmessage = function (event) {
+        console.log(`message received`);
+        processData(event.data);
+    };
+
+    socket.onopen = function (e) {
+        console.log("Connection established");
+    };
+
+    socket.onclose = function (event) {
+        if (event.wasClean) {
+            console.log(`Connection closed cleanly, code=${event.code} reason=${event.reason}`);
+        } else {
+            console.log('Connection died');
+        }
+    };
+
+    socket.onerror = function (error) {
+        console.log(`Error: ${error.message}`);
+    };
+</script>
+</body>
+</html>

@@ -15,33 +15,33 @@
 // along with Substrate Analytics.  If not, see <http://www.gnu.org/licenses/>.
 
 use actix::prelude::*;
-use chrono::NaiveDateTime;
+use chrono::{DateTime, Local, NaiveDateTime};
 use diesel::sql_types::*;
 use diesel::{result::QueryResult, sql_query, RunQueryDsl};
 use serde::Serialize;
 use serde_json::Value;
 use std::collections::HashMap;
-use std::convert::TryInto;
 use std::hash::Hash;
-use std::time::{Duration, SystemTime, UNIX_EPOCH};
+use std::time::{Duration, SystemTime};
 
 use super::{filters::Filters, DbExecutor, RECORD_LIMIT};
 
 #[derive(Serialize, Deserialize, QueryableByName, Clone, Debug)]
 pub struct SubstrateLog {
     #[sql_type = "Jsonb"]
+    #[serde(flatten)]
     pub log: Value,
     #[sql_type = "Timestamp"]
     pub created_at: NaiveDateTime,
 }
 
 #[derive(Serialize, Debug)]
-pub struct PeerDataResponse {
+pub struct PeerDataArray {
     pub peer_message: PeerMessage,
     pub data: Vec<SubstrateLog>,
 }
 
-impl Message for PeerDataResponse {
+impl Message for PeerDataArray {
     type Result = Result<(), &'static str>;
 }
 
@@ -61,7 +61,7 @@ pub struct PeerMessageTime {
 #[derive(Debug)]
 pub struct PeerMessageTimeList {
     pub list: Vec<PeerMessageTime>,
-    pub cache: Recipient<PeerDataResponse>,
+    pub cache: Recipient<PeerDataArray>,
 }
 
 impl Message for PeerMessageTimeList {
@@ -95,7 +95,7 @@ impl Handler<PeerMessageTimeList> for DbExecutor {
 }
 
 impl DbExecutor {
-    fn get_logs(&self, filters: Filters) -> Result<PeerDataResponse, failure::Error> {
+    fn get_logs(&self, filters: Filters) -> Result<PeerDataArray, failure::Error> {
         let peer_id = filters.peer_id.clone().unwrap_or(String::new());
         let msg = filters.msg.clone().unwrap_or(String::new());
         let start_time = filters
@@ -103,7 +103,7 @@ impl DbExecutor {
             .unwrap_or_else(|| NaiveDateTime::from_timestamp(0, 0));
         match self.with_connection(|conn| {
             let query = sql_query(
-                "SELECT sl.logs as log, \
+                "SELECT sl.logs - 'ts' - 'id' - 'msg' - 'level' - 'line' as log, \
                  sl.created_at \
                  FROM substrate_logs sl \
                  LEFT JOIN peer_connections pc ON sl.peer_connection_id = pc.id \
@@ -126,7 +126,7 @@ impl DbExecutor {
         }) {
             Ok(Ok(data)) => {
                 let peer_message = PeerMessage { peer_id, msg };
-                Ok(PeerDataResponse { peer_message, data })
+                Ok(PeerDataArray { peer_message, data })
             }
             Ok(Err(e)) => Err(e.into()),
             Err(e) => Err(e.into()),
@@ -139,10 +139,8 @@ pub fn time_secs_ago(seconds_ago: u64) -> NaiveDateTime {
     let ts = now
         .checked_sub(Duration::from_secs(seconds_ago))
         .expect("We should be using sane values for default_start_time");
-    let ds = ts
-        .duration_since(UNIX_EPOCH)
-        .expect("We should be using sane values for default_start_time");
-    NaiveDateTime::from_timestamp((ds.as_secs() as u64).try_into().unwrap(), 0)
+    let dt: DateTime<Local> = ts.into();
+    dt.naive_utc()
 }
 
 impl std::fmt::Display for PeerMessage {
