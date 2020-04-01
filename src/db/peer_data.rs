@@ -141,10 +141,6 @@ pub fn time_secs_ago(seconds_ago: u64) -> NaiveDateTime {
         .expect("We should be using sane values for default_start_time");
     let dt: DateTime<Local> = ts.into();
     dt.naive_utc()
-    //    let ds = ts
-    //        .duration_since(UNIX_EPOCH)
-    //        .expect("We should be using sane values for default_start_time");
-    //    NaiveDateTime::from_timestamp((ds.as_secs() as u64).try_into().unwrap(), 0)
 }
 
 impl std::fmt::Display for PeerMessage {
