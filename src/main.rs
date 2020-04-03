@@ -45,37 +45,48 @@ use actix::prelude::*;
 use actix_web::{middleware, App, HttpServer};
 
 lazy_static! {
-    /// Must be set
+    /// *Must be set* Database URL
     pub static ref DATABASE_URL: String =
         env::var("DATABASE_URL").expect("Must have DATABASE_URL environment variable set");
+    /// Port to start server
     pub static ref PORT: String = env::var("PORT").expect("Unable to get PORT from ENV");
-    /// Optional
+    /// Interval to send WS Ping
     pub static ref HEARTBEAT_INTERVAL: Duration = Duration::from_secs(
         parse_env("HEARTBEAT_INTERVAL").unwrap_or(5)
     );
+    /// How long to wait before dropping an unresponsive WS connection
     pub static ref CLIENT_TIMEOUT_S: Duration = Duration::from_secs(
         parse_env("CLIENT_TIMEOUT_S").unwrap_or(10)
     );
+    /// How often we clean out the DB of expired logs
     pub static ref PURGE_INTERVAL_S: Duration = Duration::from_secs(
         parse_env("PURGE_INTERVAL_S").unwrap_or(600)
     );
+    /// Number of hours to keep logs in DB before deleting them
+    /// Does not affect logs received on the `/archive` route
     pub static ref LOG_EXPIRY_H: u32 = parse_env("LOG_EXPIRY_H").unwrap_or(3);
-    pub static ref MAX_PENDING_CONNECTIONS: i32 = parse_env("MAX_PENDING_CONNECTIONS").unwrap_or(8192);
-
-    // Set Codec to accept payload size of 512 MiB because default 65KiB is not enough
+    /// Max number of pending connections to hold in backlog before returnin server error
+    pub static ref MAX_PENDING_CONNECTIONS: i32 = parse_env("MAX_PENDING_CONNECTIONS").unwrap_or(1024);
+    /// Max payload size for WS message
+    /// Default to accept payload size of 512 MiB because default 65KiB is not enough
     pub static ref WS_MAX_PAYLOAD: usize = parse_env("WS_MAX_PAYLOAD").unwrap_or(524_288);
-
-    pub static ref NUM_THREADS: usize = num_cpus::get() * 3;
-
+    /// Number of threads to start for DbExecutor
+    pub static ref NUM_THREADS: usize = parse_env("NUM_THREADS").unwrap_or(num_cpus::get() * 3);
+    /// Connections to establish for DB pool
     pub static ref DB_POOL_SIZE: u32 = parse_env("DB_POOL_SIZE").unwrap_or(*NUM_THREADS as u32);
+    /// Max batch size before saving logs to DB
     pub static ref DB_BATCH_SIZE: usize = parse_env("DB_BATCH_SIZE").unwrap_or(1024);
+    /// Max amount of time to wait before saving logs to DB
     pub static ref DB_SAVE_LATENCY_MS: Duration = Duration::from_millis(parse_env("DB_SAVE_LATENCY_MS").unwrap_or(100));
-
+    /// How long to wait for a response from the DB - warnings logged at this time and update aborted at 4* this value
     pub static ref CACHE_UPDATE_TIMEOUT_S: Duration = Duration::from_secs(parse_env("CACHE_UPDATE_TIMEOUT_S").unwrap_or(15));
+    /// How often to poll the DB for new messages
     pub static ref CACHE_UPDATE_INTERVAL_MS: Duration = Duration::from_millis(parse_env("CACHE_UPDATE_INTERVAL_MS").unwrap_or(1000));
+    /// Duration of history to store in cache
     pub static ref CACHE_EXPIRY_S: u64 = parse_env("CACHE_EXPIRY_S").unwrap_or(10_800);
+    /// How long to keep an unused cache in memory until we drop it
     pub static ref CACHE_TIMEOUT_S: u64 = parse_env("CACHE_TIMEOUT_S").unwrap_or(60);
-
+    /// Location of `static` directory
     pub static ref ASSETS_PATH: String = parse_env("ASSETS_PATH").unwrap_or("./static".to_string());
 }
 
@@ -196,7 +207,6 @@ async fn main() -> std::io::Result<()> {
 // Private
 
 fn log_statics() {
-    info!("Configuration options:");
     info!("DATABASE_URL has been set");
     info!("PORT = {:?}", *PORT);
     info!("NUM_THREADS = {:?}", *NUM_THREADS);

@@ -154,7 +154,6 @@ impl Handler<PeerDataArray> for WebSocket {
                                 time = measurements[(measurements.len() as f64 * 0.9) as usize]
                             }
                         }
-                        trace!("Aggregate time: {}", time);
                         let agm = AggregateMeasurement {
                             time: time.clone(),
                             name: name.clone(),

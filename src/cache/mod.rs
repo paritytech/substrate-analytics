@@ -113,6 +113,11 @@ impl Actor for Cache {
         ctx.run_interval(*PURGE_INTERVAL_S, |act, _ctx| {
             act.purge_expired();
         });
+        // Start purge cycle
+        ctx.run_interval(Duration::from_secs(60), |act, _ctx| {
+            debug!("Cache subscribers: {}", act.subscribers.len());
+            debug!("Cache len: {}", act.cache.len());
+        });
     }
 }
 
@@ -278,7 +283,7 @@ impl Cache {
                 data: response_data,
             };
             if let Err(e) = recipient.try_send(pdr) {
-                error!("Unable to send PeerDataResponse: {:?}", e);
+                debug!("Unable to send PeerDataResponse: {:?}", e);
                 dead.push(recipient.to_owned());
             } else {
                 *pmt = peer_message_cache.last_updated.clone();

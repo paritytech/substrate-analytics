@@ -83,7 +83,6 @@ impl Handler<PeerMessageTimeList> for DbExecutor {
                 ..Default::default()
             };
             let pd_res = self.get_logs(filters);
-            trace!("pd_res: {:?}", pd_res);
             if let Ok(pdr) = pd_res {
                 // send to cache
                 if let Err(e) = cache.do_send(pdr) {
