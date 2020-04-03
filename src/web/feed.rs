@@ -301,7 +301,15 @@ impl WebSocket {
         subscription: &Subscription,
         json: Value,
     ) -> Result<(), &'static str> {
-        if subscription.interest == Interest::Unsubscribe || json.get("aggregate_type").is_none() {
+        let peer_message = PeerMessage {
+            peer_id: subscription.peer_id.to_owned(),
+            msg: subscription.msg.to_owned(),
+        };
+        if subscription.interest == Interest::Unsubscribe {
+            self.aggregate_subscriptions.remove(&peer_message);
+            return Ok(());
+        }
+        if json.get("aggregate_type").is_none() {
             return Ok(());
         }
         let aggregate_type = json["aggregate_type"].as_str();
@@ -316,10 +324,6 @@ impl WebSocket {
                     aggregate_type,
                     key: "time".to_string(),
                     update_interval: Duration::from_secs(a_interval),
-                };
-                let peer_message = PeerMessage {
-                    peer_id: subscription.peer_id.to_owned(),
-                    msg: subscription.msg.to_owned(),
                 };
                 let aggregate_subscription = AggregateSubscription {
                     subscription: subscription.to_owned(),
