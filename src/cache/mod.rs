@@ -21,9 +21,13 @@ use crate::db::{
     },
     DbExecutor,
 };
-use crate::{CACHE_EXPIRY_S, CACHE_UPDATE_INTERVAL_MS, CACHE_UPDATE_TIMEOUT_S, PURGE_INTERVAL_S};
+use crate::{
+    CACHE_EXPIRY_S, CACHE_TIMEOUT_S, CACHE_UPDATE_INTERVAL_MS, CACHE_UPDATE_TIMEOUT_S,
+    PURGE_INTERVAL_S,
+};
 use actix::prelude::*;
 use chrono::NaiveDateTime;
+use failure::_core::time::Duration;
 use futures::FutureExt;
 use slice_deque::SliceDeque;
 use std::collections::HashMap;
@@ -34,6 +38,7 @@ pub struct PeerMessageCache {
     pub deque: SliceDeque<SubstrateLog>,
     pub last_updated: NaiveDateTime,
     pub started_update: Option<Instant>,
+    pub last_used: Instant,
 }
 
 impl Cache {
@@ -52,6 +57,8 @@ impl Cache {
 
     pub fn initialise_update(&mut self) -> Vec<PeerMessageTime> {
         let now = Instant::now();
+        self.cache
+            .retain(|_, pmc| pmc.last_used + Duration::from_secs(*CACHE_TIMEOUT_S) > now);
         self.cache
             .iter_mut()
             .filter_map(|(pm, pmc)| {
@@ -205,19 +212,25 @@ impl Cache {
             return;
         }
         // Update cache
-        let mut peer_data = self
+        let mut peer_message_cache = self
             .cache
             .get_mut(&msg.peer_message)
             .expect("Already checked in updates_in_progress()");
         let peer_message = msg.peer_message.clone();
         let mut vpd = msg.data;
         // TODO Is there any possibility that we append duplicate data?
-        peer_data.deque.append(&mut vpd[..].into());
+        peer_message_cache.deque.append(&mut vpd[..].into());
         // Probably unnecessary, TODO remove last_updated field, replace with method returning it
-        peer_data.last_updated = peer_data.deque.last().unwrap().created_at.to_owned();
+        peer_message_cache.last_updated = peer_message_cache
+            .deque
+            .last()
+            .unwrap()
+            .created_at
+            .to_owned();
         // Iterate through subscribers and send latest data based on their last_updated time
         // Can be optimised for usual best case with fallback to binary_search
         let mut dead = Vec::new();
+        let now = Instant::now();
         for (recipient, peer_messages) in self
             .subscribers
             .iter_mut()
@@ -229,7 +242,7 @@ impl Cache {
                 .0
                 .get_mut(&msg.peer_message)
                 .expect("Must not be modified anywhere else");
-            let idx = match peer_data
+            let idx = match peer_message_cache
                 .deque
                 .binary_search_by(|item| item.created_at.cmp(&pmt))
             {
@@ -240,7 +253,7 @@ impl Cache {
                 Some(n) => n,
                 None => {
                     debug!("Finding closest time");
-                    peer_data
+                    peer_message_cache
                         .deque
                         .iter_mut()
                         .enumerate()
@@ -259,7 +272,7 @@ impl Cache {
                         .0
                 }
             };
-            let response_data = peer_data.deque[idx..].to_vec();
+            let response_data = peer_message_cache.deque[idx..].to_vec();
             let pdr = PeerDataArray {
                 peer_message: peer_message.clone(),
                 data: response_data,
@@ -268,7 +281,8 @@ impl Cache {
                 error!("Unable to send PeerDataResponse: {:?}", e);
                 dead.push(recipient.to_owned());
             } else {
-                *pmt = peer_data.last_updated.clone();
+                *pmt = peer_message_cache.last_updated.clone();
+                peer_message_cache.last_used = now;
                 trace!(
                     "SubscriberInfo for ({:?}) - {:?} last updated: {}",
                     recipient,
@@ -373,15 +387,13 @@ impl Cache {
         }
     }
 
-    fn subscribe_msgs(&mut self, peer_message: PeerMessage, start_time: Option<NaiveDateTime>) {
+    fn subscribe_msgs(&mut self, peer_message: PeerMessage, _start_time: Option<NaiveDateTime>) {
+        // start_time currently not used, but possible to optimise memory use with it
         use std::collections::hash_map::Entry;
-        let last_updated = start_time.unwrap_or(time_secs_ago(*CACHE_EXPIRY_S * 3600));
+        let last_updated = time_secs_ago(*CACHE_EXPIRY_S);
         // Set last accessed now, otherwise could be missed if subscriber is closed before accessed
         match self.cache.entry(peer_message) {
             Entry::Occupied(mut _o) => {
-                //                if o.get().last_updated > last_updated {
-                //                    o.get_mut().last_updated = last_updated;
-                //                }
                 // temporarily noop, because we fix cache start time to CACHE_EXPIRY_S
             }
             Entry::Vacant(v) => {
@@ -389,6 +401,7 @@ impl Cache {
                     deque: SliceDeque::new(),
                     last_updated,
                     started_update: None,
+                    last_used: Instant::now(),
                 });
             }
         }
@@ -422,6 +435,7 @@ mod tests {
             deque: SliceDeque::new(),
             last_updated: time_secs_ago(0),
             started_update: None,
+            last_used: Instant::now(),
         };
         cache.cache.insert(k, v);
         let k = PeerMessage {
@@ -432,6 +446,7 @@ mod tests {
             deque: SliceDeque::new(),
             last_updated: time_secs_ago(0),
             started_update: None,
+            last_used: Instant::now(),
         };
         cache.cache.insert(k, v);
     }

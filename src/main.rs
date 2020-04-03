@@ -74,6 +74,7 @@ lazy_static! {
     pub static ref CACHE_UPDATE_TIMEOUT_S: Duration = Duration::from_secs(parse_env("CACHE_UPDATE_TIMEOUT_S").unwrap_or(15));
     pub static ref CACHE_UPDATE_INTERVAL_MS: Duration = Duration::from_millis(parse_env("CACHE_UPDATE_INTERVAL_MS").unwrap_or(1000));
     pub static ref CACHE_EXPIRY_S: u64 = parse_env("CACHE_EXPIRY_S").unwrap_or(10_800);
+    pub static ref CACHE_TIMEOUT_S: u64 = parse_env("CACHE_TIMEOUT_S").unwrap_or(60);
 
     pub static ref ASSETS_PATH: String = parse_env("ASSETS_PATH").unwrap_or("./static".to_string());
 }
@@ -211,6 +212,7 @@ fn log_statics() {
     info!("CACHE_UPDATE_TIMEOUT_S = {:?}", *CACHE_UPDATE_TIMEOUT_S);
     info!("CACHE_UPDATE_INTERVAL_MS = {:?}", *CACHE_UPDATE_INTERVAL_MS);
     info!("CACHE_EXPIRY_S = {:?}", *CACHE_EXPIRY_S);
+    info!("CACHE_TIMEOUT_S = {:?}", *CACHE_TIMEOUT_S);
 }
 
 fn parse_env<T>(var: &'static str) -> Result<T, ()>
