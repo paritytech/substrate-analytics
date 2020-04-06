@@ -56,7 +56,8 @@ RUN apt-get update && \
 RUN useradd -m -u 1000 -U -s /bin/sh -d /analytics analytics
 
 COPY --from=builder /substrate-analytics/target/release/substrate-analytics /usr/local/bin/
-COPY --from=builder /substrate-analytics/static /srv/substrate-analytics
+RUN mkdir -p /srv/substrate-analytics
+COPY --from=builder /substrate-analytics/static /srv/substrate-analytics/
 COPY --from=builder /substrate-analytics/bin/diesel /usr/local/bin/
 
 COPY ./migrations /analytics/migrations
