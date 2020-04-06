@@ -4,11 +4,9 @@ RUN apt-get update && \
     DEBIAN_FRONTEND=noninteractive apt-get upgrade -y && \
     DEBIAN_FRONTEND=noninteractive apt-get install -y libpq-dev
 
-
 # build diesel first as there may be no changes and caching will be used
 RUN echo "building diesel-cli" && \
   cargo install diesel_cli --root /substrate-analytics --bin diesel --force --no-default-features --features postgres
-
 
 WORKDIR /substrate-analytics
 
@@ -27,14 +25,10 @@ RUN rm -rf ./src ./target/release/deps/substrate_analytics-*
 # copy your source tree
 COPY ./src ./src
 
-
 # ADD ./ ./
 
 RUN echo "building substrate-analytics" && \
   cargo build --release
-
-
-
 
 FROM debian:stretch-slim
 # metadata
@@ -56,15 +50,13 @@ RUN apt-get update && \
 RUN useradd -m -u 1000 -U -s /bin/sh -d /analytics analytics
 
 COPY --from=builder /substrate-analytics/target/release/substrate-analytics /usr/local/bin/
-RUN mkdir -p /srv/substrate-analytics
-COPY --from=builder /substrate-analytics/static /srv/substrate-analytics/
 COPY --from=builder /substrate-analytics/bin/diesel /usr/local/bin/
 
 COPY ./migrations /analytics/migrations
+COPY ./static /srv/substrate-analytics
 
 WORKDIR /analytics
 USER analytics
 ENV RUST_BACKTRACE 1
-
 
 ENTRYPOINT [ "/bin/sh", "-x", "-c", "/usr/local/bin/diesel migration run && exec /usr/local/bin/substrate-analytics"]
