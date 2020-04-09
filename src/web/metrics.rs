@@ -18,6 +18,7 @@ use actix_web::{http::StatusCode, HttpRequest, HttpResponse, Result as AWResult}
 use std::fmt;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
+use sysinfo::{NetworkExt, NetworksExt, System, SystemExt};
 
 #[derive(Clone, Default)]
 pub struct Metrics {
@@ -26,7 +27,9 @@ pub struct Metrics {
     ws_dropped_count: Arc<AtomicU64>,
     ws_bytes_received: Arc<AtomicU64>,
     req_count: Arc<AtomicU64>,
-    concurrent_feed_count: Arc<AtomicU64>,
+    feeds_connected: Arc<AtomicU64>,
+    feeds_disconnected: Arc<AtomicU64>,
+    system: Arc<System>,
 }
 
 impl Metrics {
@@ -46,17 +49,27 @@ impl Metrics {
         self.req_count.fetch_add(1, Ordering::Relaxed);
     }
     pub fn inc_concurrent_feed_count(&self) {
-        self.concurrent_feed_count.fetch_add(1, Ordering::Relaxed);
+        self.feeds_connected.fetch_add(1, Ordering::Relaxed);
     }
     pub fn dec_concurrent_feed_count(&self) {
-        self.concurrent_feed_count.fetch_sub(1, Ordering::Relaxed);
+        self.feeds_disconnected.fetch_add(1, Ordering::Relaxed);
+    }
+
+    fn bytes_io(&self, sys: &System) -> (u64, u64) {
+        let mut total_sent = 0;
+        let mut total_rec = 0;
+        for (_, data) in sys.get_networks().iter() {
+            total_sent += data.get_total_transmitted();
+            total_rec += data.get_total_received();
+        }
+        (total_sent, total_rec)
     }
 }
 
 const WS_MESSAGE_COUNT_TEMPLATE: &str =
-    "# HELP ws_message_count Number of binary and text messages received - (does not include PING/PONG messages)\n\
-     # TYPE ws_message_count counter\n\
-     ws_message_count ";
+    "# HELP substrate_message_count Number of binary and text messages received - (does not include PING/PONG messages)\n\
+     # TYPE substrate_message_count counter\n\
+     substrate_message_count ";
 
 const WS_CONNECTED_COUNT_TEMPLATE: &str =
     "# HELP nodes_connected_count Total number of WS connections made since launch.\n\
@@ -68,26 +81,95 @@ const WS_DROPPED_COUNT_TEMPLATE: &str =
      # TYPE nodes_dropped_count counter\n\
      nodes_dropped_count ";
 
-const WS_BYTES_RECEIVED_TEMPLATE: &str =
-    "# HELP ws_bytes_received Total bytes received in binary and text WS messages.\n\
-     # TYPE ws_bytes_received counter\n\
-     ws_bytes_received ";
+const CURRENT_SUBSTRATE_CONNECTIONS_TEMPLATE: &str =
+    "# HELP current_substrate_connections Number of WS substrate connections sending data.\n\
+     # TYPE current_substrate_connections gauge\n\
+     current_substrate_connections ";
+
+const SUBSTRATE_BYTES_RECEIVED_TEMPLATE: &str =
+    "# HELP substrate_bytes_received Total bytes received in binary and text WS messages from substrate clients.\n\
+     # TYPE substrate_bytes_received counter\n\
+     substrate_bytes_received ";
+
+const BYTES_RECEIVED_TEMPLATE: &str =
+    "# HELP bytes_received Total bytes received in binary and text WS messages.\n\
+     # TYPE bytes_received counter\n\
+     bytes_received ";
+
+const BYTES_SENT_TEMPLATE: &str =
+    "# HELP bytes_sent Total bytes received in binary and text WS messages.\n\
+     # TYPE bytes_sent counter\n\
+     bytes_sent ";
 
 const REQ_COUNT_TEMPLATE: &str =
     "# HELP requests Number of get requests to non WS routes, also excluding metrics route.\n\
      # TYPE requests counter\n\
      requests ";
 
-const CONCURRENT_FEED_COUNT_TEMPLATE: &str =
-    "# HELP concurrent_feed_connections Number of WS feed connections consuming data.\n\
-     # TYPE concurrent_feed_connections gauge\n\
-     concurrent_feed_connections ";
+const CURRENT_FEED_COUNT_TEMPLATE: &str =
+    "# HELP current_feed_connections Number of WS feed connections consuming data.\n\
+     # TYPE current_feed_connections gauge\n\
+     current_feed_connections ";
+
+const FEEDS_CONNECTED_TEMPLATE: &str =
+    "# HELP feeds_connected Number of WS connections for live feed\n\
+     # TYPE feeds_connected counter\n\
+     feeds_connected ";
+
+const FEEDS_DROPPED_TEMPLATE: &str =
+    "# HELP feeds_disconnected Number of WS disconnections for live feed\n\
+     # TYPE feeds_disconnected counter\n\
+     feeds_disconnected ";
+
+const LOAD_AVG_ONE_TEMPLATE: &str = "# HELP load_avg_one System load average one minute\n\
+     # TYPE load_avg_one gauge\n\
+     load_avg_one ";
+
+const LOAD_AVG_FIVE_TEMPLATE: &str = "# HELP load_avg_five System load average five minutes\n\
+     # TYPE load_avg_five gauge\n\
+     load_avg_five ";
+
+const LOAD_AVG_FIFTEEN_TEMPLATE: &str =
+    "# HELP load_avg_fifteen System load average fifteen minutes\n\
+     # TYPE load_avg_fifteen gauge\n\
+     load_avg_fifteen ";
+
+const TOTAL_MEM_TEMPLATE: &str = "# HELP total_mem Total system RAM (KiB)\n\
+     # TYPE total_mem gauge\n\
+     total_mem ";
+
+const USED_MEM_TEMPLATE: &str = "# HELP used_mem Used system RAM (KiB)\n\
+     # TYPE used_mem gauge\n\
+     used_mem ";
+
+const TOTAL_SWAP_TEMPLATE: &str = "# HELP total_swap Total system swap (KiB)\n\
+     # TYPE total_swap gauge\n\
+     total_swap ";
+
+const USED_SWAP_TEMPLATE: &str = "# HELP used_swap Used swap (KiB)\n\
+     # TYPE used_swap gauge\n\
+     used_swap ";
 
 impl fmt::Display for Metrics {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let sys = System::new_all();
+        let (total_sent, total_rec) = self.bytes_io(&sys);
+        let load_avg = sys.get_load_average();
         write!(
             f,
             "{}{}\n\
+             {}{}\n\
+             {}{}\n\
+             {}{}\n\
+             {}{}\n\
+             {}{}\n\
+             {}{}\n\
+             {}{}\n\
+             {}{}\n\
+             {}{}\n\
+             {}{}\n\
+             {}{}\n\
+             {}{}\n\
              {}{}\n\
              {}{}\n\
              {}{}\n\
@@ -99,12 +181,38 @@ impl fmt::Display for Metrics {
             self.ws_connected_count.load(Ordering::Relaxed),
             WS_DROPPED_COUNT_TEMPLATE,
             self.ws_dropped_count.load(Ordering::Relaxed),
-            WS_BYTES_RECEIVED_TEMPLATE,
+            CURRENT_SUBSTRATE_CONNECTIONS_TEMPLATE,
+            self.ws_connected_count.load(Ordering::Relaxed)
+                - self.ws_dropped_count.load(Ordering::Relaxed),
+            SUBSTRATE_BYTES_RECEIVED_TEMPLATE,
             self.ws_bytes_received.load(Ordering::Relaxed),
+            BYTES_RECEIVED_TEMPLATE,
+            total_rec,
+            BYTES_SENT_TEMPLATE,
+            total_sent,
             REQ_COUNT_TEMPLATE,
             self.req_count.load(Ordering::Relaxed),
-            CONCURRENT_FEED_COUNT_TEMPLATE,
-            self.concurrent_feed_count.load(Ordering::Relaxed),
+            CURRENT_FEED_COUNT_TEMPLATE,
+            self.feeds_connected.load(Ordering::Relaxed)
+                - self.feeds_disconnected.load(Ordering::Relaxed),
+            FEEDS_CONNECTED_TEMPLATE,
+            self.feeds_connected.load(Ordering::Relaxed),
+            FEEDS_DROPPED_TEMPLATE,
+            self.feeds_disconnected.load(Ordering::Relaxed),
+            LOAD_AVG_ONE_TEMPLATE,
+            load_avg.one,
+            LOAD_AVG_FIVE_TEMPLATE,
+            load_avg.five,
+            LOAD_AVG_FIFTEEN_TEMPLATE,
+            load_avg.fifteen,
+            TOTAL_MEM_TEMPLATE,
+            sys.get_total_memory(),
+            USED_MEM_TEMPLATE,
+            sys.get_used_memory(),
+            TOTAL_SWAP_TEMPLATE,
+            sys.get_total_swap(),
+            USED_SWAP_TEMPLATE,
+            sys.get_used_swap(),
         )
     }
 }
