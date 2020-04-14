@@ -22,15 +22,16 @@ use failure::Error;
 use serde_json::Value;
 
 use super::{filters::Filters, DbExecutor, RECORD_LIMIT};
+use crate::db::models::PeerConnection;
 
 pub struct NodesQuery(pub Filters);
 
 impl Message for NodesQuery {
-    type Result = Result<Vec<Node>, Error>;
+    type Result = Result<Vec<PeerConnection>, Error>;
 }
 
 impl Handler<NodesQuery> for DbExecutor {
-    type Result = Result<Vec<Node>, Error>;
+    type Result = Result<Vec<PeerConnection>, Error>;
 
     fn handle(&mut self, msg: NodesQuery, _: &mut Self::Context) -> Self::Result {
         self.get_nodes(msg.0)
@@ -221,10 +222,15 @@ impl DbExecutor {
         }
     }
 
-    fn get_nodes(&self, _filters: Filters) -> Result<Vec<Node>, Error> {
+    fn get_nodes(&self, _filters: Filters) -> Result<Vec<PeerConnection>, Error> {
         match self.with_connection(|conn| {
-            let query = "SELECT DISTINCT peer_id FROM peer_connections";
-            let result: QueryResult<Vec<Node>> = diesel::sql_query(query).get_results(conn);
+            let query = "SELECT DISTINCT ON (peer_id) peer_id, \
+            id, ip_addr, created_at, audit, name, \
+            chain, version, authority, startup_time, implementation \
+             FROM peer_connections \
+             ORDER BY peer_id, created_at DESC";
+            let result: QueryResult<Vec<PeerConnection>> =
+                diesel::sql_query(query).get_results(conn);
             result
         }) {
             Ok(Ok(v)) => Ok(v),
