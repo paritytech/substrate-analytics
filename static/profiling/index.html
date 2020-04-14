@@ -8,7 +8,8 @@
     <link rel=stylesheet href=https://cdn.jsdelivr.net/npm/pretty-print-json@0.2/dist/pretty-print-json.css>
     <script src=https://cdn.jsdelivr.net/npm/pretty-print-json@0.2/dist/pretty-print-json.min.js></script>
     <script src="https://cdn.plot.ly/plotly-latest.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/luxon@1.22.2/build/global/luxon.min.js" integrity="sha256-cnTIO3/prqlJsQYnbM4KpDvQHqTRGDz2QQlYJ8f8bmY=" crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/luxon@1.22.2/build/global/luxon.min.js"
+            integrity="sha256-cnTIO3/prqlJsQYnbM4KpDvQHqTRGDz2QQlYJ8f8bmY=" crossorigin="anonymous"></script>
 </head>
 <body>
 
@@ -29,7 +30,7 @@
                         <div class="select">
                             <select id="node-select">
                             </select>
-                         </div>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -58,7 +59,8 @@
                         <div class="field">
                             <div class="control">
                                 <p class="heading">Aggregate interval (s)</p>
-                                <input id="aggregate-interval" class="input" type="text" placeholder="Agg. interval (s)">
+                                <input id="aggregate-interval" class="input" type="text"
+                                       placeholder="Agg. interval (s)">
                             </div>
                         </div>
                     </div>
@@ -77,8 +79,6 @@
                     </div>
                 </div>
             </div>
-
-
 
 
             <div class="navbar-item">
@@ -229,16 +229,11 @@
     }
 
     function loadNodeConnected(peerId) {
-        let request = new Request(`/nodes/logs?peer_id=${peerId}&msg=system.connected`);
-        fetch(request)
-            .then(response => response.json())
-            .then(json => {
-                let connected = json[json.length - 1].logs;
-                document.getElementById('system-name').innerHTML = connected.name;
-                document.getElementById('system-chain').innerHTML = connected.chain;
-                document.getElementById('system-authority').innerHTML = connected.authority;
-                document.getElementById('system-started').innerHTML = new Date(parseInt(connected.startup_time)).toISOString();
-            });
+        let selected_node = nodes.get(peerId);
+        document.getElementById('system-name').innerHTML = selected_node.name;
+        document.getElementById('system-chain').innerHTML = selected_node.chain;
+        document.getElementById('system-authority').innerHTML = selected_node.authority;
+        document.getElementById('system-started').innerHTML = new Date(parseInt(selected_node.startup_time)).toISOString();
     }
 
     function stopFeed() {
@@ -270,8 +265,8 @@
             .then(response => response.json())
             .then(json => {
                 for (const node of json) {
-                    nodes.set(node.id, node);
-                    let peer_id_abbr = `${node.peer_id.substring(0,6)}...${node.peer_id.substring(node.peer_id.length - 6, node.peer_id.length)}`;
+                    nodes.set(node.peer_id, node);
+                    let peer_id_abbr = `${node.peer_id.substring(0, 6)}...${node.peer_id.substring(node.peer_id.length - 6, node.peer_id.length)}`;
                     const opt = new Option(peer_id_abbr, node.peer_id);
                     nodeSelect.options.add(opt);
                 }
@@ -288,7 +283,7 @@
 
     function processData(data) {
         let json = JSON.parse(data);
-        if (!json.hasOwnProperty('peer_message') || ! json['peer_message'].hasOwnProperty('msg')) {
+        if (!json.hasOwnProperty('peer_message') || !json['peer_message'].hasOwnProperty('msg')) {
             console.log(json);
             return;
         }
