@@ -93,6 +93,12 @@ impl NodeSocket {
             .send(NewPeerConnection {
                 ip_addr: String::from(ip), //
                 peer_id: None,
+                name: None,
+                chain: None,
+                version: None,
+                authority: None,
+                startup_time: None,
+                implementation: None,
                 audit,
             })
             .await;
@@ -124,6 +130,44 @@ impl NodeSocket {
             Ok(_) => debug!(
                 "Saved new peer connection record (ID: {:?}) for peer_id: {}",
                 self.peer_connection.id, peer_id
+            ),
+            _ => error!(
+                "Failed to send updated PeerConnection to DB actor for peer_connection_id: {}",
+                self.peer_connection.id
+            ),
+        }
+    }
+
+    fn update_peer_info(&mut self, log: &Value) {
+        info!("x");
+        if let Some(peer_id) = log["network_id"].as_str() {
+            self.peer_connection.peer_id = Some(peer_id.to_string());
+            debug!("Found peerId: {}, for ip address: {}", peer_id, &self.ip);
+        }
+        if let Some(name) = log["name"].as_str() {
+            self.peer_connection.name = Some(name.to_string());
+        }
+        if let Some(chain) = log["chain"].as_str() {
+            self.peer_connection.chain = Some(chain.to_string());
+        }
+        if let Some(version) = log["version"].as_str() {
+            self.peer_connection.version = Some(version.to_string());
+        }
+        if let Some(authority) = log["authority"].as_bool() {
+            self.peer_connection.authority = Some(authority);
+        }
+        if let Some(startup_time) = log["startup_time"].as_str() {
+            if let Ok(startup_time) = startup_time.parse::<i64>() {
+                self.peer_connection.startup_time = Some(startup_time);
+            }
+        }
+        if let Some(implementation) = log["implementation"].as_str() {
+            self.peer_connection.implementation = Some(implementation.to_string());
+        }
+        match self.db.try_send(self.peer_connection.clone()) {
+            Ok(_) => debug!(
+                "Saved new peer connection record (ID: {:?}) for peer_id: {:?}",
+                self.peer_connection.id, self.peer_connection.peer_id
             ),
             _ => error!(
                 "Failed to send updated PeerConnection to DB actor for peer_connection_id: {}",
@@ -196,8 +240,9 @@ impl StreamHandler<Result<ws::Message, ws::ProtocolError>> for NodeSocket {
             self.metrics.inc_ws_message_count();
             if self.peer_connection.peer_id.is_none() {
                 debug!("Searching for peerId for ip address: {}", &ip);
-                if let Some(peer_id) = logs["network_id"].as_str() {
-                    self.update_peer_id(peer_id); // Support older versions of substrate
+                if let Some(_msg @ "system.connected") = logs["msg"].as_str() {
+                    self.update_peer_info(&logs);
+                // Support older versions of substrate
                 } else if let Some(peer_id) = logs["state"]["peerId"].as_str() {
                     self.update_peer_id(peer_id);
                 } else if let Some(peer_id) = logs["network_state"]["peerId"].as_str() {

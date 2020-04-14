@@ -104,7 +104,16 @@ impl Handler<PeerConnection> for DbExecutor {
         let msg_id = msg.id;
         let result = self.with_connection(|conn| {
             diesel::update(peer_connections.filter(id.eq(msg.id)))
-                .set((peer_id.eq(msg.peer_id), ip_addr.eq(msg.ip_addr)))
+                .set((
+                    peer_id.eq(msg.peer_id),
+                    ip_addr.eq(msg.ip_addr),
+                    name.eq(msg.name),
+                    chain.eq(msg.chain),
+                    version.eq(msg.version),
+                    authority.eq(msg.authority),
+                    startup_time.eq(msg.startup_time),
+                    implementation.eq(msg.implementation),
+                ))
                 .execute(conn)
         });
         if let Ok(ir) = result {

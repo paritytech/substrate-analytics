@@ -76,6 +76,12 @@ pub struct PeerConnection {
     pub peer_id: Option<String>,
     pub created_at: NaiveDateTime,
     pub audit: bool,
+    pub name: Option<String>,
+    pub chain: Option<String>,
+    pub version: Option<String>,
+    pub authority: Option<bool>,
+    pub startup_time: Option<i64>,
+    pub implementation: Option<String>,
 }
 
 #[derive(Insertable, Debug, Serialize, Deserialize)]
@@ -84,4 +90,10 @@ pub struct NewPeerConnection {
     pub ip_addr: String,
     pub peer_id: Option<String>,
     pub audit: bool,
+    pub name: Option<String>,
+    pub chain: Option<String>,
+    pub version: Option<String>,
+    pub authority: Option<bool>,
+    pub startup_time: Option<i64>,
+    pub implementation: Option<String>,
 }

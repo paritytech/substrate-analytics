@@ -35,6 +35,12 @@ table! {
         peer_id -> Nullable<Varchar>,
         created_at -> Timestamp,
         audit -> Bool,
+        name -> Nullable<Varchar>,
+        chain -> Nullable<Varchar>,
+        version -> Nullable<Varchar>,
+        authority -> Nullable<Bool>,
+        startup_time -> Nullable<Int8>,
+        implementation -> Nullable<Varchar>,
     }
 }
 
