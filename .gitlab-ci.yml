@@ -12,23 +12,16 @@ stages:
   - dockerize
   - deploy
 
-
 variables:
   GIT_STRATEGY:                    fetch
   CI_SERVER_NAME:                  "GitLab CI"
   CARGO_HOME:                      "/ci-cache/substrate-analytics/cargo/${CI_JOB_NAME}"
-
 
 .kubernetes-build:                 &kubernetes-build
   tags:
     - kubernetes-parity-build
   environment:
     name: parity-build
-
-
-
-
-
 
 #### stage:                        test
 
@@ -60,19 +53,11 @@ variables:
 #   after_script:
 #     - sccache -s
 
-
-
-
-
-
 .build-only:                       &build-only
   only:
     - master
     - tags
     - web
-
-
-
 
 #### stage:                        dockerize
 
@@ -105,16 +90,12 @@ build-publish-docker-release:
     variables:
       - $DEPLOY_TAG
 
-
-
-
-
 .deploy-template:                  &deploy
   <<:                              *build-only
   stage:                           deploy
   when:                            manual
   retry:                           1
-  image:                           parity/kubetools:latest
+  image:                           paritytech/kubetools:latest
   variables:
     NAMESPACE:                     "${KUBE_NAMESPACE}"
     REPLICAS:                      1
