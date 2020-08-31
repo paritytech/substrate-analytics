@@ -22,10 +22,10 @@ use actix_web::{HttpRequest, HttpResponse};
 
 pub fn configure(cfg: &mut actix_web::web::ServiceConfig) {
     cfg.service(
-        actix_web::web::scope("/reputation")
-            .route("/logged", actix_web::web::get().to(logged))
-            .route("/mock/{qty}", actix_web::web::get().to(mock))
-            .route("/{peer_id}", actix_web::web::get().to(single))
+        actix_web::web::scope("/reputation/")
+            .route("/logged/", actix_web::web::get().to(logged))
+            .route("/mock/{qty}/", actix_web::web::get().to(mock))
+            .route("/{peer_id}/", actix_web::web::get().to(single))
             .route("", actix_web::web::get().to(all)),
     );
 }

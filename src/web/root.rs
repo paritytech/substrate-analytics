@@ -310,7 +310,7 @@ async fn establish_connection(
 ) -> Result<HttpResponse, Error> {
     let ip = r
         .connection_info()
-        .remote()
+        .remote_addr()
         .unwrap_or("Unable to decode remote IP")
         .to_string();
     debug_headers(&r);

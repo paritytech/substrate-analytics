@@ -23,13 +23,13 @@ use actix_web::{HttpRequest, HttpResponse};
 
 pub fn configure(cfg: &mut actix_web::web::ServiceConfig) {
     cfg.service(
-        actix_web::web::scope("/nodes")
+        actix_web::web::scope("/nodes/")
             //            .route(
             //                "/{peer_id}/peer_counts",
             //                actix_web::web::get().to(peer_counts),
             //            )
-            .route("/logs", actix_web::web::get().to(logs))
-            .route("/log_stats", actix_web::web::get().to(log_stats))
+            .route("/logs/", actix_web::web::get().to(logs))
+            .route("/log_stats/", actix_web::web::get().to(log_stats))
             .route("", actix_web::web::get().to(all_nodes)),
     );
 }
