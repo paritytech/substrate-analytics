@@ -22,11 +22,14 @@ use actix_web::{HttpRequest, HttpResponse};
 
 pub fn configure(cfg: &mut actix_web::web::ServiceConfig) {
     cfg.service(
-        actix_web::web::scope("/benchmarks")
-            .route("/example", actix_web::web::get().to(example))
-            .route("/events", actix_web::web::post().to(new_event))
-            .route("/{benchmark_id}/targets", actix_web::web::get().to(targets))
-            .route("/{benchmark_id}/events", actix_web::web::get().to(events))
+        actix_web::web::scope("/benchmarks/")
+            .route("/example/", actix_web::web::get().to(example))
+            .route("/events/", actix_web::web::post().to(new_event))
+            .route(
+                "/{benchmark_id}/targets/",
+                actix_web::web::get().to(targets),
+            )
+            .route("/{benchmark_id}/events/", actix_web::web::get().to(events))
             .route("", actix_web::web::get().to(all))
             .route("", actix_web::web::post().to(new)),
     );

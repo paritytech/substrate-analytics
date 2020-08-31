@@ -42,7 +42,7 @@ pub struct PeerMessageCache {
 }
 
 impl Cache {
-    pub fn updates_in_progress(&self) -> Vec<(PeerMessage, Instant)> {
+    fn updates_in_progress(&self) -> Vec<(PeerMessage, Instant)> {
         self.cache
             .iter()
             .filter_map(|(pm, pmc)| {
@@ -55,7 +55,7 @@ impl Cache {
             .collect()
     }
 
-    pub fn initialise_update(&mut self) -> Vec<PeerMessageTime> {
+    fn initialise_update(&mut self) -> Vec<PeerMessageTime> {
         let now = Instant::now();
         self.cache
             .retain(|_, pmc| pmc.last_used + Duration::from_secs(*CACHE_TIMEOUT_S) > now);

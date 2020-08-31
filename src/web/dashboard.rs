@@ -32,4 +32,8 @@ pub fn configure(cfg: &mut actix_web::web::ServiceConfig) {
         )
         .index_file("index.html"),
     );
+    cfg.service(
+        Files::new("dashboard/health", &format!("{}/health/", *ASSETS_PATH))
+            .index_file("index.html"),
+    );
 }

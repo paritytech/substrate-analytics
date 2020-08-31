@@ -15,7 +15,7 @@ const HEARTBEAT_INTERVAL: Duration = Duration::from_secs(5);
 const CLIENT_TIMEOUT_S: Duration = Duration::from_secs(60);
 
 pub fn configure(cfg: &mut actix_web::web::ServiceConfig) {
-    cfg.service(actix_web::web::scope("/feed").route("", actix_web::web::get().to(ws_index)));
+    cfg.service(actix_web::web::scope("/feed/").route("", actix_web::web::get().to(ws_index)));
 }
 
 async fn ws_index(

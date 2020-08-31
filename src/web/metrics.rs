@@ -218,7 +218,7 @@ impl fmt::Display for Metrics {
 }
 
 pub fn configure(cfg: &mut actix_web::web::ServiceConfig) {
-    cfg.service(actix_web::web::scope("/metrics").route("", actix_web::web::get().to(root)));
+    cfg.service(actix_web::web::scope("/metrics/").route("", actix_web::web::get().to(root)));
 }
 
 async fn root(

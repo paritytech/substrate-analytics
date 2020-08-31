@@ -30,9 +30,9 @@ lazy_static! {
 
 pub fn configure(cfg: &mut actix_web::web::ServiceConfig) {
     cfg.service(
-        actix_web::web::scope("/stats")
-            .route("/db", actix_web::web::get().to(send_query))
-            .route("/version", actix_web::web::get().to(version)),
+        actix_web::web::scope("/stats/")
+            .route("/db/", actix_web::web::get().to(send_query))
+            .route("/version/", actix_web::web::get().to(version)),
     );
 }
 
