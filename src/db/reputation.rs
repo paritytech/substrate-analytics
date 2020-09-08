@@ -109,14 +109,14 @@ impl DbExecutor {
                 FROM peer_connections pc \
                     INNER JOIN substrate_logs sl \
                 ON peer_connection_id = pc.id \
-                    AND logs->>'msg' = 'system.interval' \
+                    AND logs->>'msg' = 'system.network_state' \
                     AND sl.created_at > $1 AT TIME ZONE 'UTC', \
-                    lateral jsonb_each(logs->'network_state'->'peerset'->'nodes') as peers \
+                    lateral jsonb_each(logs->'state'->'peerset'->'nodes') as peers \
                 WHERE sl.id = ANY (\
                     SELECT DISTINCT ON (peer_id) substrate_logs.id \
                     FROM substrate_logs \
                     INNER JOIN peer_connections ON peer_connection_id = peer_connections.id \
-                    WHERE logs ->> 'msg' = 'system.interval' \
+                    WHERE logs ->> 'msg' = 'system.network_state' \
                     AND substrate_logs.created_at > $2 AT TIME ZONE 'UTC' \
                     ORDER BY peer_id, substrate_logs.created_at DESC \
                     ) \
@@ -158,15 +158,15 @@ impl DbExecutor {
                 FROM peer_connections pc \
                     INNER JOIN substrate_logs sl \
                 ON peer_connection_id = pc.id \
-                    AND logs->>'msg' = 'system.interval' \
+                    AND logs->>'msg' = 'system.network_state' \
                     AND sl.created_at > $1 AT TIME ZONE 'UTC', \
-                    lateral jsonb_each(logs->'network_state'->'peerset'->'nodes') as peers \
+                    lateral jsonb_each(logs->'state'->'peerset'->'nodes') as peers \
                 WHERE key::text = ANY ($2) \
                     AND sl.id = ANY (\
                     SELECT DISTINCT ON (peer_id) substrate_logs.id \
                     FROM substrate_logs \
                     INNER JOIN peer_connections ON peer_connection_id = peer_connections.id \
-                    WHERE logs ->> 'msg' = 'system.interval' \
+                    WHERE logs ->> 'msg' = 'system.network_state' \
                     AND substrate_logs.created_at > $3 AT TIME ZONE 'UTC' \
                     ORDER BY peer_id, substrate_logs.created_at DESC \
                     ) \
