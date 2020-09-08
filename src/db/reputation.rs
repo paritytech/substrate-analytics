@@ -23,33 +23,53 @@ use diesel::{result::QueryResult, sql_query, QueryDsl, RunQueryDsl};
 use failure::Error;
 use std::time::Duration;
 
-/// Message to indicate what information is required
-pub enum Query {
+/// Message to indicate what information is required for aggregate data response
+pub enum PeerReputationsQuery {
     All(Filters),
     Logged(Filters),
-    Selected(Vec<String>, Filters),
     Mock(usize),
 }
 
-impl Message for Query {
+impl Message for PeerReputationsQuery {
     type Result = Result<Vec<PeerReputations>, Error>;
 }
 
-impl Handler<Query> for DbExecutor {
+impl Handler<PeerReputationsQuery> for DbExecutor {
     type Result = Result<Vec<PeerReputations>, Error>;
 
-    fn handle(&mut self, msg: Query, _: &mut Self::Context) -> Self::Result {
+    fn handle(&mut self, msg: PeerReputationsQuery, _: &mut Self::Context) -> Self::Result {
         match msg {
-            Query::All(filters) => self.get_reputation_all(filters),
-            Query::Logged(filters) => {
-                self.get_reputation_selected(self.get_logged_nodes()?, filters)
+            PeerReputationsQuery::All(filters) => self.get_reputation_latest_all(filters),
+            PeerReputationsQuery::Logged(filters) => {
+                self.get_reputation_latest_logged(self.get_logged_nodes()?, filters)
             }
-            Query::Selected(selected, filters) => self.get_reputation_selected(selected, filters),
-            Query::Mock(qty) => self.get_mock_results(qty),
+            PeerReputationsQuery::Mock(qty) => self.get_mock_results(qty),
         }
     }
 }
 
+/// Message to indicate what information is required for peer specific response
+pub enum PeerReputationQuery {
+    Single(String, Filters),
+}
+
+impl Message for PeerReputationQuery {
+    type Result = Result<Vec<PeerReputation>, Error>;
+}
+
+impl Handler<PeerReputationQuery> for DbExecutor {
+    type Result = Result<Vec<PeerReputation>, Error>;
+
+    fn handle(&mut self, msg: PeerReputationQuery, _: &mut Self::Context) -> Self::Result {
+        match msg {
+            PeerReputationQuery::Single(selected, filters) => {
+                self.get_peer_reputation(selected, filters)
+            }
+        }
+    }
+}
+
+/// Contains aggregate data
 #[derive(Serialize, Deserialize, Debug, QueryableByName)]
 pub struct PeerReputations {
     #[sql_type = "Text"]
@@ -60,6 +80,19 @@ pub struct PeerReputations {
     reputation: Vec<i64>,
     #[sql_type = "Array<Bool>"]
     connected: Vec<bool>,
+    #[sql_type = "Timestamp"]
+    ts: NaiveDateTime,
+}
+
+/// Contains individual data
+#[derive(Serialize, Deserialize, Debug, QueryableByName)]
+pub struct PeerReputation {
+    #[sql_type = "Text"]
+    reporting_peer: String,
+    #[sql_type = "BigInt"]
+    reputation: i64,
+    #[sql_type = "Bool"]
+    connected: bool,
     #[sql_type = "Timestamp"]
     ts: NaiveDateTime,
 }
@@ -94,7 +127,7 @@ impl DbExecutor {
         }
     }
 
-    fn get_reputation_all(&self, filters: Filters) -> Result<Vec<PeerReputations>, Error> {
+    fn get_reputation_latest_all(&self, filters: Filters) -> Result<Vec<PeerReputations>, Error> {
         match self.with_connection(|conn| {
             let max_age_s = filters.max_age_s.unwrap_or_else(|| 60);
             let start_time = start_time_from_offset(max_age_s as u64);
@@ -139,7 +172,7 @@ impl DbExecutor {
         }
     }
 
-    fn get_reputation_selected(
+    fn get_reputation_latest_logged(
         &self,
         selected: Vec<String>,
         filters: Filters,
@@ -160,7 +193,7 @@ impl DbExecutor {
                 ON peer_connection_id = pc.id \
                     AND logs->>'msg' = 'system.network_state' \
                     AND sl.created_at > $1 AT TIME ZONE 'UTC', \
-                    lateral jsonb_each(logs->'state'->'peerset'->'nodes') as peers \
+                    LATERAL jsonb_each(logs->'state'->'peerset'->'nodes') as peers \
                 WHERE key::text = ANY ($2) \
                     AND sl.id = ANY (\
                     SELECT DISTINCT ON (peer_id) substrate_logs.id \
@@ -183,6 +216,55 @@ impl DbExecutor {
                 diesel::debug_query::<diesel::pg::Pg, _>(&query)
             );
             let result: QueryResult<Vec<PeerReputations>> = query.get_results(conn);
+            result
+        }) {
+            Ok(Ok(v)) => Ok(v),
+            Ok(Err(e)) => Err(e.into()),
+            Err(e) => Err(e.into()),
+        }
+    }
+
+    fn get_peer_reputation(
+        &self,
+        selected: String,
+        filters: Filters,
+    ) -> Result<Vec<PeerReputation>, Error> {
+        match self.with_connection(|conn| {
+            let jsonb = format!("{{\"{}\": {{ }} }}", selected);
+            let sql = " \
+                SELECT \
+                    DISTINCT ON (reporting_peer,ts) \
+                    peer_id as reporting_peer, \
+                    jsonb_extract_path_text(peers.value, 'reputation')::bigint as reputation, \
+                    jsonb_extract_path_text(peers.value, 'connected')::boolean as connected, \
+                    sl.created_at as ts \
+                FROM peer_connections pc \
+                    INNER JOIN substrate_logs sl \
+                        ON peer_connection_id = pc.id, \
+                LATERAL jsonb_each(logs->'state'->'peerset'->'nodes') as peers \
+                WHERE logs->'state'->'peerset'->'nodes' @> ($1)::jsonb \
+                    AND logs->>'msg' = 'system.network_state' \
+                    AND sl.created_at > $2 AT TIME ZONE 'UTC' \
+                    AND sl.created_at < $3 AT TIME ZONE 'UTC' \
+                GROUP BY reporting_peer, ts, reputation, connected \
+                LIMIT $4";
+            let query =
+                sql_query(sql)
+                    .bind::<Text, _>(jsonb)
+                    .bind::<Timestamp, _>(
+                        filters
+                            .start_time
+                            .unwrap_or_else(|| NaiveDateTime::from_timestamp(0, 0)),
+                    )
+                    .bind::<Timestamp, _>(filters.end_time.unwrap_or_else(|| {
+                        NaiveDateTime::from_timestamp(Utc::now().timestamp(), 0)
+                    }))
+                    .bind::<Integer, _>(filters.limit.unwrap_or(1000));
+            debug!(
+                "get_peers_reputation query: {}",
+                diesel::debug_query::<diesel::pg::Pg, _>(&query)
+            );
+            let result: QueryResult<Vec<PeerReputation>> = query.get_results(conn);
             result
         }) {
             Ok(Ok(v)) => Ok(v),
