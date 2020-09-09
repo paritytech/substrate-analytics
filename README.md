@@ -33,7 +33,7 @@ the data is accessed directly from the database by a suitable dashboard (eg. Gra
 - **`/nodes/logs?peer_id=Qmd5K38Yti1NStacv7fjJwsXDCUZcf1ioKcAuFkq88RKtx&limit=1&msg=tracing.profiling&target=pallet_babe&start_time=2020-03-25T13:17:09.008533`**
   - recent log messages. Required params: `peer_id`, Optional params: `msg, target, start_time, end_time, limit`.
 
-    `msg`: String. Type of log message received, e.g. `block.import`
+    `msg`: String. Type of log message received, e.g. `block.import`. See [./telemetry_messages.json](telemetry_messages.json) for the current list of message types.
 
     `target`: String. Origin of the message, e.g. `NetworkInitialSync`
 
@@ -43,11 +43,11 @@ the data is accessed directly from the database by a suitable dashboard (eg. Gra
 
     `limit`: Number. Don't include more results than this. Default: `100`
 - **`/reputation/{peer_id}`**
-  - reported reputation for `peer_id` from the POV of other nodes. TODO: include a discussion on how the reputation is calculated, i.e. is this something `analytics` is providing or is it the peer reputation fetched from the running node? Would it be possible to extend this to query the reputation info over time?
+  - reported reputation for `peer_id` from the POV of other nodes.
 - **`/reputation/logged`**
-  - reported reputation for all peers from the POV of all logged (past/present) nodes TODO: elaborate on this; not sure I understand how this works.
+  - reported reputation for all peers from the POV of all logged (past/present) nodes
 - **`/reputation`**
-  - reported reputation for all peers unfiltered TODO:
+  - reported reputation for all peers unfiltered
 
 
 `reputation` routes take the following optional parameters (with sensible defaults if not specified):
@@ -109,7 +109,7 @@ JSON endpoints:
    "ram_mb":8192
 }
 ```
-- **`/benchmarks`**: TODO: seems like this section is work-in-progress?
+- **`/benchmarks`**:
   - `GET` to list all, `POST` to create new using the format (returns object with newly created `id`):
 ```json
 {
