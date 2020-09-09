@@ -16,14 +16,14 @@ the data is accessed directly from the database by a suitable dashboard (eg. Gra
 ### Routes
 
 #### Data ingestion
-
+`substrate-analytics` can work in one of two modes: with or without purging data after `LOG_EXPIRY_H` hours. The mode it operates under depends on which of the following two endpoints you send data to from your substrate nodes.
 - **`/`**
   - incoming telemetry (with expiry as set by `LOG_EXPIRY_H`) (ws) - set with this option in substrate cli: `--telemetry-url 'ws://127.0.0.1:8080 5'`
 - **`/audit`**
   - incoming telemetry with no expiry (ws) - set with this option in substrate cli: `--telemetry-url 'ws://127.0.0.1:8080/audit 5'`
 
 #### JSON endpoints
-`subtrate-analytics` includes a few convenience endpoints for common data.
+`subtrate-analytics` includes a few convenience endpoints to query for common data.
 - **`/stats/db`**
   - statistics about the postgres db, showing table and index sizes on disk
 - **`/nodes`**
@@ -37,9 +37,9 @@ the data is accessed directly from the database by a suitable dashboard (eg. Gra
 
     `target`: String. Origin of the message, e.g. `NetworkInitialSync`
 
-    `start_time`: String. Include entries more recent than this; format: `2019-01-01T00:00:00` TODO: specify what "sensible default" is.
+    `start_time`: String. Include entries more recent than this; format: `2019-01-01T00:00:00`. Default: `NOW`.
 
-    `end_time`: String. Include entries less recent than this; format: `2019-01-01T00:00:00` TODO: specify what "sensible default" is.
+    `end_time`: String. Include entries less recent than this; format: `2019-01-01T00:00:00`. Default: `NOW`.
 
     `limit`: Number. Don't include more results than this. Default: `100`
 - **`/reputation/{peer_id}`**
@@ -54,10 +54,9 @@ the data is accessed directly from the database by a suitable dashboard (eg. Gra
 - `max_age_s` in the format: `10`
 - `limit` in the format: `100`
 
-#### Monitoring
+#### Self-monitoring
 
-Substrate Analytics provides a `/metrics` endpoint for Prometheus.
-TODO: can you elaborate on what people would use this for? Would it be like a "Prometheus aggregator", providing data for all nodes connected to `analytics`? Don't nodes provide their data to Prometheus directly as well?
+Substrate Analytics provides a `/metrics` endpoint for Prometheus to useful to monitor the analytics instance itself. Visit the endpoint in a browser to see what metrics are available.
 
 ### Set up for development and deployment
 - [Install Postgres](https://www.postgresql.org/docs/current/tutorial-install.html)
@@ -95,7 +94,6 @@ Substrate log messages are batched together before they are sent off for storage
 
 Substrate-analytics has endpoints to define benchmarks and host systems that run the benchmarks. This is
 designed to be cross-referenced with telemetry data to provide insights into the node and system under test.
-TODO: I think we should expand on this section and perhaps even provide a full example of how to set up a simple benchmark on `n` nodes. I think the idea here is to have a set of benchmarks that run at regular intervals and to use `analytics` to keep track of results over time?
 
 JSON endpoints:
 
