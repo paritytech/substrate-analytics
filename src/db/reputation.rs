@@ -49,8 +49,9 @@ impl Handler<PeerReputationsQuery> for DbExecutor {
 }
 
 /// Message to indicate what information is required for peer specific response
-pub enum PeerReputationQuery {
-    Single(String, Filters),
+pub struct PeerReputationQuery {
+    pub peer_id: String,
+    pub filters: Filters,
 }
 
 impl Message for PeerReputationQuery {
@@ -61,11 +62,7 @@ impl Handler<PeerReputationQuery> for DbExecutor {
     type Result = Result<Vec<PeerReputation>, Error>;
 
     fn handle(&mut self, msg: PeerReputationQuery, _: &mut Self::Context) -> Self::Result {
-        match msg {
-            PeerReputationQuery::Single(selected, filters) => {
-                self.get_peer_reputation(selected, filters)
-            }
-        }
+        self.get_peer_reputation(msg.peer_id, msg.filters)
     }
 }
 

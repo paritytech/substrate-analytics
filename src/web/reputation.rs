@@ -62,9 +62,7 @@ async fn single(
         .expect("peer_id should be available because the route matched")
         .to_string();
     let filters = get_filters(&req);
-    let res = db
-        .send(PeerReputationQuery::Single(peer_id, filters))
-        .await?;
+    let res = db.send(PeerReputationQuery { peer_id, filters }).await?;
     match res {
         Ok(r) => Ok(HttpResponse::Ok().json(json!(r))),
         Err(e) => {
