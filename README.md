@@ -33,7 +33,7 @@ the data is accessed directly from the database by a suitable dashboard (eg. Gra
 - **`/nodes/logs?peer_id=Qmd5K38Yti1NStacv7fjJwsXDCUZcf1ioKcAuFkq88RKtx&limit=1&msg=tracing.profiling&target=pallet_babe&start_time=2020-03-25T13:17:09.008533`**
   - recent log messages. Required params: `peer_id`, Optional params: `msg, target, start_time, end_time, limit`.
 
-    `msg`: String. Type of log message received, e.g. `block.import` (TODO: is this true? what does this correspond to in the substrate code?)
+    `msg`: String. Type of log message received, e.g. `block.import`
 
     `target`: String. Origin of the message, e.g. `NetworkInitialSync`
 
