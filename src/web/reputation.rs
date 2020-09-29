@@ -16,7 +16,10 @@
 
 use super::get_filters;
 use super::metrics::Metrics;
-use crate::db::{reputation::Query, DbExecutor};
+use crate::db::{
+    reputation::{PeerReputationQuery, PeerReputationsQuery},
+    DbExecutor,
+};
 use actix::prelude::*;
 use actix_web::{HttpRequest, HttpResponse};
 
@@ -37,7 +40,7 @@ async fn logged(
 ) -> Result<HttpResponse, actix_web::Error> {
     metrics.inc_req_count();
     let filters = get_filters(&req);
-    let res = db.send(Query::Logged(filters)).await?;
+    let res = db.send(PeerReputationsQuery::Logged(filters)).await?;
     match res {
         Ok(r) => Ok(HttpResponse::Ok().json(json!(r))),
         Err(e) => {
@@ -59,11 +62,11 @@ async fn single(
         .expect("peer_id should be available because the route matched")
         .to_string();
     let filters = get_filters(&req);
-    let res = db.send(Query::Selected(vec![peer_id], filters)).await?;
+    let res = db.send(PeerReputationQuery { peer_id, filters }).await?;
     match res {
         Ok(r) => Ok(HttpResponse::Ok().json(json!(r))),
         Err(e) => {
-            error!("Could not complete stats query: {:?}", e);
+            error!("Could not complete single peer reputation query: {:?}", e);
             Ok(HttpResponse::InternalServerError().json(json!("Error while processing query")))
         }
     }
@@ -76,11 +79,11 @@ async fn all(
 ) -> Result<HttpResponse, actix_web::Error> {
     metrics.inc_req_count();
     let filters = get_filters(&req);
-    let res = db.send(Query::All(filters)).await?;
+    let res = db.send(PeerReputationsQuery::All(filters)).await?;
     match res {
         Ok(r) => Ok(HttpResponse::Ok().json(json!(r))),
         Err(e) => {
-            error!("Could not complete stats query: {:?}", e);
+            error!("Could not complete all peer reputation query: {:?}", e);
             Ok(HttpResponse::InternalServerError().json(json!("Error while processing query")))
         }
     }
@@ -102,11 +105,11 @@ async fn mock(
         Ok(v) => v,
         _ => std::usize::MAX,
     };
-    let res = db.send(Query::Mock(qty)).await?;
+    let res = db.send(PeerReputationsQuery::Mock(qty)).await?;
     match res {
         Ok(r) => Ok(HttpResponse::Ok().json(json!(r))),
         Err(e) => {
-            error!("Could not complete stats query: {:?}", e);
+            error!("Could not complete mock reputation query: {:?}", e);
             Ok(HttpResponse::InternalServerError().json(json!("Error while processing query")))
         }
     }

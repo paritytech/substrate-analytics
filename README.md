@@ -34,7 +34,8 @@ JSON endpoints for convenience:
 - **`/reputation/logged`**
   - reported reputation for all peers from the POV of all logged (past/present) nodes
 - **`/reputation`**
-  - reported reputation for all peers unfiltered
+  - reported reputation for all peers unfiltered 
+  (note that this can contain many entries that are not even part of the network)
 
 `peer_counts` and `logs` routes take the following optional parameters (with sensible defaults if not specified):
 - `start_time` in the format: `2019-01-01T00:00:00`
