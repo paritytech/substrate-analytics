@@ -1,0 +1,372 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Substrate Analytics - Live Profiling</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bulma@0.8.0/css/bulma.min.css">
+    <link rel=stylesheet href=https://cdn.jsdelivr.net/npm/pretty-print-json@0.2/dist/pretty-print-json.css>
+    <script src=https://cdn.jsdelivr.net/npm/pretty-print-json@0.2/dist/pretty-print-json.min.js></script>
+    <script src="https://cdn.plot.ly/plotly-latest.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/luxon@1.22.2/build/global/luxon.min.js"
+            integrity="sha256-cnTIO3/prqlJsQYnbM4KpDvQHqTRGDz2QQlYJ8f8bmY=" crossorigin="anonymous"></script>
+</head>
+<body>
+
+
+<nav class="navbar" role="navigation" aria-label="main navigation">
+    <div class="navbar-menu is-active">
+        <div class="navbar-start">
+            <div class=" navbar-item">
+                <h1 class="title">
+                    Peer Reputation
+                </h1>
+            </div>
+
+            <div class="navbar-item">
+                <div class="field">
+                    <div class="control">
+                        <p class="heading">Node</p>
+                        <div class="select">
+                            <select id="node-select">
+                            </select>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="navbar-item">
+                <div class="field">
+                    <div class="field-body">
+                        <div class="field">
+                            <div class="control">
+                                <p class="heading">Mins to show (default: 5)</p>
+                                <input id="minutes-to-show" class="input" type="text" placeholder="Mins to show">
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+
+            <div class="navbar-item">
+                <div class="field">
+                    <div class="control">
+                        <p class="heading">&nbsp;</p>
+                        <button class="button is-primary" onclick="initialiseFeed()">View</button>
+                    </div>
+                </div>
+            </div>
+            <div class="navbar-item">
+                <div class="field">
+                    <div class="control">
+                        <p class="heading">&nbsp;</p>
+                        <button class="button is-secondary" onclick="stopFeed()">Cancel</button>
+                    </div>
+                </div>
+            </div>
+
+        </div>
+    </div>
+</nav>
+
+<nav class="level">
+    <div class="level-item has-text-centered">
+        <div>
+            <p class="heading">Name</p>
+            <p class="title" id="system-name"></p>
+        </div>
+    </div>
+    <div class="level-item has-text-centered">
+        <div>
+            <p class="heading">Chain</p>
+            <p class="title" id="system-chain"></p>
+        </div>
+    </div>
+    <div class="level-item has-text-centered">
+        <div>
+            <p class="heading">Authority</p>
+            <p class="title" id="system-authority"></p>
+        </div>
+    </div>
+    <div class="level-item has-text-centered">
+        <div>
+            <p class="heading">Started</p>
+            <p class="title" id="system-started"></p>
+        </div>
+    </div>
+    <div class="level-item has-text-centered">
+        <div>
+            <p class="heading">Peers</p>
+            <p class="title" id="system-peers"></p>
+        </div>
+    </div>
+    <div class="level-item has-text-centered">
+        <div>
+            <p class="heading">Height</p>
+            <p class="title" id="system-height"></p>
+        </div>
+    </div>
+</nav>
+
+<template id="graph-template">
+    <div class="container is-fluid"></div>
+</template>
+
+<section class="section" id="graphs">
+</section>
+
+<script>
+    let minutesToShow = 5;
+
+    let peerId = "";
+
+    class PeerMessageSubscription {
+        constructor(peer_id, msg, aggregate_type, aggregate_interval, start_time, interest) {
+            this.peer_id = peer_id;
+            this.msg = msg;
+            this.aggregate_type = aggregate_type;
+            this.aggregate_interval = aggregate_interval;
+            this.start_time = start_time;
+            this.interest = interest;
+            this.aggregate_key = '';
+        }
+    }
+
+    let nodes = new Map();
+    const nodeSelect = document.querySelector('#node-select');
+    nodeSelect.addEventListener('change', (event) => {
+
+    });
+
+    function initialiseFeed() {
+        stopFeed();
+        networkData.clear();
+        plots = document.getElementsByClassName("node-graph");
+        for (let plot of plots) {
+            Plotly.newPlot(plot.id)
+            Plotly.purge(plot.id);
+        }
+        document.getElementById('graphs').innerHTML = '';
+        peerId = document.getElementById('node-select').value;
+
+        let mins = parseInt(document.getElementById('minutes-to-show').value);
+        if (isNaN(mins)) {
+            console.log("Could not parse minutes-to-show, using default: 5");
+            minutesToShow = 5;
+        } else {
+            minutesToShow = mins;
+        }
+        let start_time = luxon.DateTime.local().toUTC().minus({minutes: minutesToShow}).toFormat("yyyy-MM-dd'T'HH:mm:ss.SSS");
+        for (node of nodes) {
+            if (node[0] === peerId || node[0] === 0) {
+                continue;
+            }
+            let subscription = new PeerMessageSubscription(
+                node[0],
+                'system.network_state',
+                '',
+                0,
+                start_time,
+                'subscribe');
+            socket.send(JSON.stringify(subscription));
+        }
+        let subscription2 = new PeerMessageSubscription(
+            peerId,
+            'system.interval',
+            '',
+            '',
+            luxon.DateTime.local().toUTC().toFormat("yyyy-MM-dd'T'HH:mm:ss.SSS"),
+            'subscribe');
+
+        socket.send(JSON.stringify(subscription2));
+        loadNodeConnected(peerId);
+    }
+
+    function loadNodeConnected(peerId) {
+        let selected_node = nodes.get(peerId);
+        document.getElementById('system-name').innerHTML = selected_node.name;
+        document.getElementById('system-chain').innerHTML = selected_node.chain;
+        document.getElementById('system-authority').innerHTML = selected_node.authority;
+        document.getElementById('system-started').innerHTML = new Date(parseInt(selected_node.startup_time)).toISOString();
+    }
+
+    function stopFeed() {
+        for (node of nodes) {
+            if (node[0] === peerId || node[0] === 0) {
+                continue;
+            }
+            let subscription = new PeerMessageSubscription(
+                node[0],
+                'system.network_state',
+                "",
+                "",
+                "",
+                'unsubscribe');
+            socket.send(JSON.stringify(subscription));
+        }
+        let subscription2 = new PeerMessageSubscription(
+            peerId,
+            'system.interval',
+            "",
+            "",
+            "",
+            'unsubscribe');
+        socket.send(JSON.stringify(subscription2));
+    }
+
+    function loadNodes() {
+        nodeSelect.options.length = 0;
+        nodes.set(0, "Please select a node");
+        const opt = new Option("Please select a node", 0);
+        nodeSelect.options.add(opt);
+        let request = new Request('/nodes');
+        fetch(request)
+            .then(response => response.json())
+            .then(json => {
+                for (const node of json) {
+                    nodes.set(node.peer_id, node);
+                    let peer_id_abbr = `${node.peer_id.substring(0, 6)}...${node.peer_id.substring(node.peer_id.length - 6, node.peer_id.length)}`;
+                    const opt = new Option(peer_id_abbr, node.peer_id);
+                    nodeSelect.options.add(opt);
+                }
+            });
+    }
+
+    loadNodes();
+
+</script>
+
+<script>
+    let socket = new WebSocket(`ws://${window.location.host}/feed`);
+    let networkData = new Map();
+
+    function processData(data) {
+        let json = JSON.parse(data);
+        if (!json.hasOwnProperty('peer_message') || !json['peer_message'].hasOwnProperty('msg')) {
+            console.log(json);
+            return;
+        }
+        switch (json.peer_message.msg) {
+            case "system.network_state":
+                processNetworkState(json);
+                break;
+            case "system.interval":
+                processInterval(json);
+                break;
+            default:
+                console.log(`Message received: ${json.peer_message.msg}`);
+        }
+    }
+
+    function processInterval(json) {
+        let height;
+        let peers;
+        // Sometimes system.interval does not contain all fields, update most recent if present
+        for (const element of json.data) {
+            if (typeof element.height !== 'undefined') {
+                height = element.height;
+            }
+            if (typeof element.peers !== 'undefined') {
+                peers = element.peers;
+            }
+        }
+        if (typeof height !== 'undefined') {
+            document.getElementById('system-height').innerHTML = height;
+        }
+        if (typeof peers !== 'undefined') {
+            document.getElementById('system-peers').innerHTML = peers;
+        }
+    }
+
+    function processNetworkState(json) {
+        for (const message of json.data) {
+            for (const [reported_peer_id, value] of Object.entries(message.state.peerset.nodes)) {
+                if (reported_peer_id !== peerId) {
+                    continue;
+                }
+                if (!networkData.has(message.state['peerId'])) {
+                    // Create new array for [[created_at] , [reputation]] for this reporting peer
+                    networkData.set(message.state['peerId'], [[], []]);
+                }
+                let reputation_reports = networkData.get(message.state['peerId']);
+                reputation_reports[0].push(new Date(message.created_at));
+                reputation_reports[1].push(value['reputation']);
+            }
+        }
+        updatePlots();
+    }
+
+    function expireOld(arrs) {
+        let idx = getTruncateIndex(arrs[0]);
+        for (let arr of arrs) {
+            arr.reverse();
+            arr.splice(arr.length - idx, arr.length);
+            arr.reverse();
+        }
+    }
+
+    function getTruncateIndex(arr) {
+        const start_time = new Date(luxon.DateTime.local().toUTC().minus({minutes: minutesToShow}).toFormat("yyyy-MM-dd'T'HH:mm:ss.SSS"));
+
+        for (let i = 0; i < arr.length; i++) {
+            if (arr[i] > start_time) {
+                return i;
+            }
+        }
+    }
+
+    function updatePlots() {
+        let nameTraces = [];
+        for (const [peer_id, values] of networkData) {
+                expireOld(values);
+                nameTraces.push({
+                    x: values[0],
+                    y: values[1],
+                    textposition: 'top',
+                    name: peer_id,
+                    type: "scatter",
+                    mode: 'lines+markers'
+                });
+        }
+        let layout = {
+            title: 'Peer Reputation',
+            yaxis: {title: "reputation"},
+            datarevision: Date.now()
+        };
+        let graphName = "reputation-graph";
+        if (!document.getElementById(graphName)) {
+            let template = document.querySelector('#graph-template');
+            var node = template.content.cloneNode(true);
+            var divItem = node.querySelector('div');
+            divItem.id = graphName;
+            divItem.className = "node-graph";
+            document.getElementById('graphs').appendChild(node);
+            Plotly.newPlot(graphName, nameTraces, layout);
+        } else {
+            Plotly.react(graphName, nameTraces, layout);
+        }
+    }
+
+    socket.onmessage = function (event) {
+        processData(event.data);
+    };
+
+    socket.onopen = function (e) {
+        console.log("Connection established");
+    };
+
+    socket.onclose = function (event) {
+        if (event.wasClean) {
+            console.log(`Connection closed cleanly, code=${event.code} reason=${event.reason}`);
+        } else {
+            console.log('Connection died');
+        }
+    };
+
+    socket.onerror = function (error) {
+        console.error(error.message);
+    };
+</script>
+</body>
+</html>

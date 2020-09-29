@@ -136,18 +136,6 @@
     </div>
     <div class="level-item has-text-centered">
         <div>
-            <p class="heading">CPU</p>
-            <p class="title" id="system-cpu"></p>
-        </div>
-    </div>
-    <div class="level-item has-text-centered">
-        <div>
-            <p class="heading">Memory</p>
-            <p class="title" id="system-memory"></p>
-        </div>
-    </div>
-    <div class="level-item has-text-centered">
-        <div>
             <p class="heading">Peers</p>
             <p class="title" id="system-peers"></p>
         </div>
@@ -300,11 +288,23 @@
     }
 
     function processInterval(json) {
-        let interval = json.data[json.data.length - 1]
-        document.getElementById('system-cpu').innerHTML = interval.cpu;
-        document.getElementById('system-memory').innerHTML = interval.memory;
-        document.getElementById('system-height').innerHTML = interval.height;
-        document.getElementById('system-peers').innerHTML = interval.peers;
+        let height;
+        let peers;
+        // Sometimes system.interval does not contain all fields, update most recent if present
+        for (const element of json.data) {
+            if (typeof element.height !== 'undefined') {
+                height = element.height;
+            }
+            if (typeof element.peers !== 'undefined') {
+                peers = element.peers;
+            }
+        }
+        if (typeof height !== 'undefined') {
+            document.getElementById('system-height').innerHTML = height;
+        }
+        if (typeof peers !== 'undefined') {
+            document.getElementById('system-peers').innerHTML = peers;
+        }
     }
 
     function processTracing(json) {

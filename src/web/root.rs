@@ -139,7 +139,6 @@ impl NodeSocket {
     }
 
     fn update_peer_info(&mut self, log: &Value) {
-        info!("x");
         if let Some(peer_id) = log["network_id"].as_str() {
             self.peer_connection.peer_id = Some(peer_id.to_string());
             debug!("Found peerId: {}, for ip address: {}", peer_id, &self.ip);
