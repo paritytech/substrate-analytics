@@ -361,7 +361,8 @@
             let layout = {
                 title: name,
                 yaxis: {title: "Execution time (ns)"},
-                datarevision: Date.now()
+                datarevision: Date.now(),
+                showlegend: true
             };
             let graphName = `graph-${name}`;
             if (!document.getElementById(graphName)) {
