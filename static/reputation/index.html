@@ -227,7 +227,7 @@
                 for (const node of json) {
                     nodes.set(node.peer_id, node);
                     let peer_id_abbr = `${node.peer_id.substring(0, 6)}...${node.peer_id.substring(node.peer_id.length - 6, node.peer_id.length)}`;
-                    const opt = new Option(peer_id_abbr, node.peer_id);
+                    const opt = new Option(`${node.name} (${peer_id_abbr})`, node.peer_id);
                     nodeSelect.options.add(opt);
                 }
             });
