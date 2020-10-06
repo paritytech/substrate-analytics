@@ -226,11 +226,14 @@
             .then(json => {
                 for (const node of json) {
                     nodes.set(node.peer_id, node);
-                    let peer_id_abbr = `${node.peer_id.substring(0, 6)}...${node.peer_id.substring(node.peer_id.length - 6, node.peer_id.length)}`;
-                    const opt = new Option(`${node.name} (${peer_id_abbr})`, node.peer_id);
+                    const opt = new Option(`${node.name} (${peerIdAbbr(node)})`, node.peer_id);
                     nodeSelect.options.add(opt);
                 }
             });
+    }
+
+    function peerIdAbbr(node) {
+        return `${node.peer_id.substring(0, 6)}...${node.peer_id.substring(node.peer_id.length - 6, node.peer_id.length)}`;
     }
 
     loadNodes();
@@ -319,15 +322,17 @@
     function updatePlots() {
         let nameTraces = [];
         for (const [peer_id, values] of networkData) {
-                expireOld(values);
-                nameTraces.push({
-                    x: values[0],
-                    y: values[1],
-                    textposition: 'top',
-                    name: peer_id,
-                    type: "scatter",
-                    mode: 'lines+markers'
-                });
+            let node_detail = nodes.get(peer_id);
+            let identifier = `${node_detail.name} (${peerIdAbbr(node_detail)})`;
+            expireOld(values);
+            nameTraces.push({
+                x: values[0],
+                y: values[1],
+                textposition: 'top',
+                name: identifier,
+                type: "scatter",
+                mode: 'lines+markers'
+            });
         }
         let layout = {
             title: 'Peer Reputation',
