@@ -262,9 +262,7 @@ fn send_updates(
     peer_message_cache: &mut PeerMessageCache,
     subscribers: &mut HashMap<Recipient<PeerDataArray>, PeerMessages>,
 ) -> Vec<Recipient<PeerDataArray>> {
-    // Iterate through subscribers and send latest data based on their last_updated time
-    // Can be optimised for usual best case with fallback to binary_search
-    let mut dead = Vec::new();
+    let mut dead_subscribers = Vec::new();
     let now = Instant::now();
     for (recipient, peer_messages) in subscribers
         .iter_mut()
@@ -278,10 +276,10 @@ fn send_updates(
             peer_message_cache,
         ) {
             debug!("Unable to send PeerDataResponse: {:?}", e);
-            dead.push(recipient.to_owned());
+            dead_subscribers.push(recipient.to_owned());
         }
     }
-    dead
+    dead_subscribers
 }
 
 fn update_subscriber(
@@ -295,6 +293,8 @@ fn update_subscriber(
         .0
         .get_mut(&peer_message)
         .expect("Must not be modified anywhere else");
+    // Iterate through subscribers and send latest data based on their last_updated time
+    // Can be optimised for usual best case with fallback to binary_search
     let idx = match peer_message_cache
         .deque
         .binary_search_by(|item| item.created_at.cmp(&update_time))
