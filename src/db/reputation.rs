@@ -289,7 +289,7 @@ impl DbExecutor {
             "QmQJmDorK9c8KjMF5PdWiH2WGUXyzJtgTeJ55S5gggdju7",
         ];
         if max < peer_ids.len() {
-            let _ = peer_ids.split_off(max);
+            peer_ids.truncate(max);
         };
         for peer_id in peer_ids.clone() {
             let mut p = vec![];

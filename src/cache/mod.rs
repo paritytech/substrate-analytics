@@ -45,9 +45,9 @@ impl Cache {
     fn updates_in_progress(&self) -> Vec<(PeerMessage, Instant)> {
         self.cache
             .iter()
-            .filter_map(|(pm, pmc)| {
-                if let Some(instant) = pmc.started_update {
-                    Some((pm.to_owned(), instant.clone()))
+            .filter_map(|(peer_message, peer_message_cache)| {
+                if let Some(instant) = peer_message_cache.started_update {
+                    Some((peer_message.to_owned(), instant.clone()))
                 } else {
                     None
                 }
@@ -57,16 +57,17 @@ impl Cache {
 
     fn initialise_update(&mut self) -> Vec<PeerMessageTime> {
         let now = Instant::now();
-        self.cache
-            .retain(|_, pmc| pmc.last_used + Duration::from_secs(*CACHE_TIMEOUT_S) > now);
+        self.cache.retain(|_, peer_message_cache| {
+            peer_message_cache.last_used + Duration::from_secs(*CACHE_TIMEOUT_S) > now
+        });
         self.cache
             .iter_mut()
-            .filter_map(|(pm, pmc)| {
-                if let None = pmc.started_update {
-                    pmc.started_update = Some(now.clone());
+            .filter_map(|(peer_message, peer_message_cache)| {
+                if let None = peer_message_cache.started_update {
+                    peer_message_cache.started_update = Some(now.clone());
                     Some(PeerMessageTime {
-                        peer_message: pm.to_owned(),
-                        time: pmc.last_updated.to_owned(),
+                        peer_message: peer_message.to_owned(),
+                        time: peer_message_cache.last_updated.to_owned(),
                     })
                 } else {
                     None
@@ -166,12 +167,12 @@ impl Cache {
 
     fn purge_expired(&mut self) {
         let expiry_time = time_secs_ago((*CACHE_EXPIRY_S).into());
-        for (_, pmc) in &mut self.cache {
-            if pmc.deque.is_empty() {
+        for (_, peer_message_cache) in &mut self.cache {
+            if peer_message_cache.deque.is_empty() {
                 continue;
             };
             let mut idx = 0;
-            for (n, sl) in pmc.deque.iter().enumerate() {
+            for (n, sl) in peer_message_cache.deque.iter().enumerate() {
                 let ms_since = sl
                     .created_at
                     .signed_duration_since(expiry_time)
@@ -181,8 +182,8 @@ impl Cache {
                     break;
                 }
             }
-            let new_len = pmc.deque.len() - idx;
-            pmc.deque.truncate_front(new_len);
+            let new_len = peer_message_cache.deque.len() - idx;
+            peer_message_cache.deque.truncate_front(new_len);
         }
     }
 }
@@ -318,18 +319,18 @@ fn update_subscriber(
                         &b.1.created_at
                             .signed_duration_since(*update_time)
                             .num_milliseconds();
-                    (y * y).cmp(&(z * z))
+                    (y.abs()).cmp(&(z.abs()))
                 })
                 .expect("")
                 .0
         }
     };
     let response_data = peer_message_cache.deque[idx..].to_vec();
-    let pdr = PeerDataArray {
+    let peer_data_array = PeerDataArray {
         peer_message: peer_message.clone(),
         data: response_data,
     };
-    recipient.try_send(pdr)?;
+    recipient.try_send(peer_data_array)?;
     *update_time = peer_message_cache.last_updated.clone();
     peer_message_cache.last_used = now.clone();
     trace!(
@@ -513,13 +514,13 @@ mod tests {
         let mut cache = get_test_setup();
         add_cache_entries(&mut cache);
         assert_eq!(cache.cache.len(), 2);
-        for (_pm, pmc) in &cache.cache {
-            assert!(pmc.started_update.is_none());
+        for (_, peer_message_cache) in &cache.cache {
+            assert!(peer_message_cache.started_update.is_none());
         }
         let n_updating = cache.initialise_update().len();
         assert_eq!(n_updating, 2);
-        for (_pm, pmc) in &cache.cache {
-            assert!(pmc.started_update.is_some());
+        for (_, peer_message_cache) in &cache.cache {
+            assert!(peer_message_cache.started_update.is_some());
         }
     }
 
@@ -531,8 +532,8 @@ mod tests {
         cache.initialise_update();
         let updates = cache.updates_in_progress();
         assert_eq!(updates.len(), 2);
-        for (_pm, pmc) in &cache.cache {
-            assert!(pmc.started_update.is_some());
+        for (_, peer_message_cache) in &cache.cache {
+            assert!(peer_message_cache.started_update.is_some());
         }
     }
 
