@@ -30,7 +30,7 @@ use chrono::NaiveDateTime;
 use failure::_core::time::Duration;
 use futures::FutureExt;
 use slice_deque::SliceDeque;
-use std::collections::HashMap;
+use std::collections::{hash_map::Entry, HashMap};
 use std::time::Instant;
 
 #[derive(Debug)]
@@ -222,9 +222,8 @@ impl Cache {
             .get_mut(&msg.peer_message)
             .expect("Already checked in updates_in_progress()");
         let peer_message = msg.peer_message.clone();
-        let mut vpd = msg.data;
         // TODO Is there any possibility that we append duplicate data?
-        peer_message_cache.deque.append(&mut vpd[..].into());
+        peer_message_cache.deque.append(&mut msg.data[..].into());
         // Probably unnecessary, TODO remove last_updated field, replace with method returning it
         peer_message_cache.last_updated = peer_message_cache
             .deque
@@ -232,73 +231,13 @@ impl Cache {
             .unwrap()
             .created_at
             .to_owned();
-        // Iterate through subscribers and send latest data based on their last_updated time
-        // Can be optimised for usual best case with fallback to binary_search
-        let mut dead = Vec::new();
-        let now = Instant::now();
-        for (recipient, peer_messages) in self
-            .subscribers
-            .iter_mut()
-            .filter(|(_, s)| s.0.iter().find(|(p, _)| p == &&peer_message).is_some())
-        {
-            //
-            //            debug!("Subscriber PeerMessages: {:?}", &peer_messages);
-            let pmt = peer_messages
-                .0
-                .get_mut(&msg.peer_message)
-                .expect("Must not be modified anywhere else");
-            let idx = match peer_message_cache
-                .deque
-                .binary_search_by(|item| item.created_at.cmp(&pmt))
-            {
-                Ok(n) => Some(n + 1),
-                _ => None,
-            };
-            let idx = match idx {
-                Some(n) => n,
-                None => {
-                    debug!("Finding closest time");
-                    peer_message_cache
-                        .deque
-                        .iter_mut()
-                        .enumerate()
-                        .min_by(|a, b| {
-                            let y =
-                                a.1.created_at
-                                    .signed_duration_since(*pmt)
-                                    .num_milliseconds();
-                            let z =
-                                &b.1.created_at
-                                    .signed_duration_since(*pmt)
-                                    .num_milliseconds();
-                            (y * y).cmp(&(z * z))
-                        })
-                        .expect("")
-                        .0
-                }
-            };
-            let response_data = peer_message_cache.deque[idx..].to_vec();
-            let pdr = PeerDataArray {
-                peer_message: peer_message.clone(),
-                data: response_data,
-            };
-            if let Err(e) = recipient.try_send(pdr) {
-                debug!("Unable to send PeerDataResponse: {:?}", e);
-                dead.push(recipient.to_owned());
-            } else {
-                *pmt = peer_message_cache.last_updated.clone();
-                peer_message_cache.last_used = now;
-                trace!(
-                    "SubscriberInfo for ({:?}) - {:?} last updated: {}",
-                    recipient,
-                    msg.peer_message,
-                    pmt,
-                );
-            }
-        }
+
+        let dead = send_updates(&peer_message, peer_message_cache, &mut self.subscribers);
+
         for r in dead {
             self.subscribers.remove(&r);
         }
+
         let dur = Instant::now() - started_update;
         debug!(
             "Cache update cycle for {} took: {} seconds",
@@ -315,6 +254,91 @@ impl Cache {
             .take()
             .expect("Already checked that this cache is expecting update")
     }
+}
+
+fn send_updates(
+    peer_message: &PeerMessage,
+    peer_message_cache: &mut PeerMessageCache,
+    subscribers: &mut HashMap<Recipient<PeerDataArray>, PeerMessages>,
+) -> Vec<Recipient<PeerDataArray>> {
+    // Iterate through subscribers and send latest data based on their last_updated time
+    // Can be optimised for usual best case with fallback to binary_search
+    let mut dead = Vec::new();
+    let now = Instant::now();
+    for (recipient, peer_messages) in subscribers
+        .iter_mut()
+        .filter(|(_, s)| s.0.iter().find(|(p, _)| p == &peer_message).is_some())
+    {
+        if let Err(e) = update_subscriber(
+            recipient,
+            peer_messages,
+            peer_message,
+            &now,
+            peer_message_cache,
+        ) {
+            debug!("Unable to send PeerDataResponse: {:?}", e);
+            dead.push(recipient.to_owned());
+        }
+    }
+    dead
+}
+
+fn update_subscriber(
+    recipient: &Recipient<PeerDataArray>,
+    peer_messages: &mut PeerMessages,
+    peer_message: &PeerMessage,
+    now: &Instant,
+    peer_message_cache: &mut PeerMessageCache,
+) -> Result<(), SendError<PeerDataArray>> {
+    let update_time = peer_messages
+        .0
+        .get_mut(&peer_message)
+        .expect("Must not be modified anywhere else");
+    let idx = match peer_message_cache
+        .deque
+        .binary_search_by(|item| item.created_at.cmp(&update_time))
+    {
+        Ok(n) => Some(n + 1),
+        _ => None,
+    };
+    let idx = match idx {
+        Some(n) => n,
+        None => {
+            debug!("Finding closest time");
+            peer_message_cache
+                .deque
+                .iter_mut()
+                .enumerate()
+                .min_by(|a, b| {
+                    let y =
+                        a.1.created_at
+                            .signed_duration_since(*update_time)
+                            .num_milliseconds();
+                    let z =
+                        &b.1.created_at
+                            .signed_duration_since(*update_time)
+                            .num_milliseconds();
+                    (y * y).cmp(&(z * z))
+                })
+                .expect("")
+                .0
+        }
+    };
+    let response_data = peer_message_cache.deque[idx..].to_vec();
+    let pdr = PeerDataArray {
+        peer_message: peer_message.clone(),
+        data: response_data,
+    };
+    recipient.try_send(pdr)?;
+    *update_time = peer_message_cache.last_updated.clone();
+    peer_message_cache.last_used = now.clone();
+    trace!(
+        "SubscriberInfo for ({:?}) - {:?} last updated: {}",
+        recipient,
+        peer_message,
+        update_time,
+    );
+    Ok(())
 }
 
 #[derive(Eq, PartialEq, Debug, Clone)]
@@ -359,22 +383,45 @@ impl Cache {
         &mut self,
         peer_id: String,
         msg: String,
-        subscriber_addr: Recipient<PeerDataArray>,
+        recipient: Recipient<PeerDataArray>,
         start_time: Option<NaiveDateTime>,
     ) {
         let last_updated = start_time.unwrap_or(time_secs_ago(0));
-        let peer_message = PeerMessage {
-            peer_id: peer_id.clone(),
-            msg: msg.to_owned(),
-        };
+        let peer_message = PeerMessage { peer_id, msg };
+        let peer_messages = self
+            .subscribers
+            .entry(recipient.clone())
+            .or_insert(PeerMessages(HashMap::new()));
 
-        self.subscribe_msgs(peer_message.clone(), start_time);
-
-        self.subscribers
-            .entry(subscriber_addr)
-            .or_insert(PeerMessages(HashMap::new()))
+        peer_messages
             .0
-            .insert(peer_message, last_updated);
+            .entry(peer_message.clone())
+            .or_insert(last_updated);
+
+        let last_updated = time_secs_ago(*CACHE_EXPIRY_S);
+        // Set last accessed now, otherwise could be missed if subscriber is closed before accessed
+        match self.cache.entry(peer_message) {
+            Entry::Occupied(mut entry) => {
+                // temporarily noop, because we fix cache start time to CACHE_EXPIRY_S
+
+                // If we have some data cached already, send it without waiting for next cache update
+                let _ = update_subscriber(
+                    &recipient,
+                    peer_messages,
+                    &entry.key().clone(),
+                    &Instant::now(),
+                    entry.get_mut(),
+                );
+            }
+            Entry::Vacant(v) => {
+                v.insert(PeerMessageCache {
+                    deque: SliceDeque::new(),
+                    last_updated,
+                    started_update: None,
+                    last_used: Instant::now(),
+                });
+            }
+        }
     }
 
     pub fn unsubscribe(
@@ -391,34 +438,12 @@ impl Cache {
             peer_messages.0.remove(&peer_message);
         }
     }
-
-    fn subscribe_msgs(&mut self, peer_message: PeerMessage, _start_time: Option<NaiveDateTime>) {
-        // start_time currently not used, but possible to optimise memory use with it
-        use std::collections::hash_map::Entry;
-        let last_updated = time_secs_ago(*CACHE_EXPIRY_S);
-        // Set last accessed now, otherwise could be missed if subscriber is closed before accessed
-        match self.cache.entry(peer_message) {
-            Entry::Occupied(mut _o) => {
-                // temporarily noop, because we fix cache start time to CACHE_EXPIRY_S
-            }
-            Entry::Vacant(v) => {
-                v.insert(PeerMessageCache {
-                    deque: SliceDeque::new(),
-                    last_updated,
-                    started_update: None,
-                    last_used: Instant::now(),
-                });
-            }
-        }
-    }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use actix_web::test;
     use dotenv::dotenv;
-    use std::env;
     use std::sync::RwLock;
 
     fn get_test_setup() -> Cache {
@@ -488,7 +513,7 @@ mod tests {
         let mut cache = get_test_setup();
         add_cache_entries(&mut cache);
         assert_eq!(cache.cache.len(), 2);
-        for (pm, pmc) in &cache.cache {
+        for (_pm, pmc) in &cache.cache {
             assert!(pmc.started_update.is_none());
         }
         let n_updating = cache.initialise_update().len();
