@@ -79,12 +79,11 @@ build-publish-docker-release:
     - buildah info
   script:
     - buildah bud
-        --squash
         --format=docker
         --tag "$CONTAINER_IMAGE:$CI_COMMIT_SHORT_SHA"
         --tag "$CONTAINER_IMAGE:latest" .
     - buildah push --format=v2s2 $CONTAINER_IMAGE:$CI_COMMIT_SHORT_SHA
-                                 $CONTAINER_IMAGE:latest
+    - buildah push --format=v2s2 $CONTAINER_IMAGE:latest
   after_script:
     - buildah logout docker.io
   except:
